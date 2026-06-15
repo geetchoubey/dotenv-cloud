@@ -105,6 +105,9 @@ pub struct ProviderRegistryConfig {
     pub allow_unsigned: bool,
     #[serde(default)]
     pub install_scope: Option<String>,
+    /// base64 ed25519 public key used to verify signed provider archives.
+    #[serde(default)]
+    pub public_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

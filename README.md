@@ -34,9 +34,12 @@ Implemented in this build:
 - subprocess execution with exit-code propagation — spec §11
 - shell export (`bash`, `zsh`, `fish`, `powershell`) with safe quoting — spec §10.5
 - commands: `run`, `export`, `build`, `resolve`, `validate`, `doctor`, `init`, `providers`
+- registry-backed provider installation: `providers install/search/update`, `init`,
+  and `run --install-missing-providers` download an archive, verify its sha256
+  (+ optional ed25519 signature), unpack it, and update `dotenv-cloud.lock`
 
-Not yet in this build: registry download/signature verification for
-`providers install` / `init` (provider plugins are installed manually for now).
+See [`docs/REGISTRY.md`](docs/REGISTRY.md) for the registry index format and the
+signing/integrity model.
 
 ## Commands
 

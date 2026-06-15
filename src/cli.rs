@@ -81,7 +81,9 @@ impl GlobalArgs {
             .map(|s| {
                 s.split_once('=')
                     .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .ok_or_else(|| CliError::Usage(format!("invalid --set `{s}`, expected KEY=VALUE")))
+                    .ok_or_else(|| {
+                        CliError::Usage(format!("invalid --set `{s}`, expected KEY=VALUE"))
+                    })
             })
             .collect()
     }
@@ -100,12 +102,22 @@ fn parse_duration(s: &str) -> CliResult<Duration> {
     let s = s.trim();
     let invalid = || CliError::Usage(format!("invalid duration `{s}`"));
     if let Some(num) = s.strip_suffix("ms") {
-        return num.trim().parse::<u64>().map(Duration::from_millis).map_err(|_| invalid());
+        return num
+            .trim()
+            .parse::<u64>()
+            .map(Duration::from_millis)
+            .map_err(|_| invalid());
     }
     if let Some(num) = s.strip_suffix('s') {
-        return num.trim().parse::<u64>().map(Duration::from_secs).map_err(|_| invalid());
+        return num
+            .trim()
+            .parse::<u64>()
+            .map(Duration::from_secs)
+            .map_err(|_| invalid());
     }
-    s.parse::<u64>().map(Duration::from_millis).map_err(|_| invalid())
+    s.parse::<u64>()
+        .map(Duration::from_millis)
+        .map_err(|_| invalid())
 }
 
 #[derive(Debug, Subcommand)]

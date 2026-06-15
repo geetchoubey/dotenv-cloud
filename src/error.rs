@@ -87,8 +87,9 @@ impl ProviderErrorClass {
     #[allow(dead_code)] // mirrored by pipeline::map_provider_error; kept as canonical mapping.
     pub fn exit_code(self) -> ExitCode {
         match self {
-            ProviderErrorClass::AuthenticationFailed
-            | ProviderErrorClass::PermissionDenied => ExitCode::ProviderAuth,
+            ProviderErrorClass::AuthenticationFailed | ProviderErrorClass::PermissionDenied => {
+                ExitCode::ProviderAuth
+            }
             ProviderErrorClass::Timeout
             | ProviderErrorClass::RateLimited
             | ProviderErrorClass::Network

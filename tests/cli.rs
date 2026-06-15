@@ -18,10 +18,21 @@ fn run_injects_env_and_passes_exit_code() {
     let dir = temp_project("FOO=bar\nPORT=3000\n");
     let out = bin()
         .current_dir(dir.path())
-        .args(["--no-env-local", "run", "--", "sh", "-c", "test \"$FOO\" = bar"])
+        .args([
+            "--no-env-local",
+            "run",
+            "--",
+            "sh",
+            "-c",
+            "test \"$FOO\" = bar",
+        ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]
@@ -57,8 +68,14 @@ fn missing_provider_fails_closed() {
     // No provider installed -> ProviderUnavailable -> exit 7.
     assert_eq!(out.status.code(), Some(7));
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("[redacted]"), "reference should be redacted: {stderr}");
-    assert!(!stderr.contains("password\n"), "raw secret path leaked: {stderr}");
+    assert!(
+        stderr.contains("[redacted]"),
+        "reference should be redacted: {stderr}"
+    );
+    assert!(
+        !stderr.contains("password\n"),
+        "raw secret path leaked: {stderr}"
+    );
 }
 
 #[test]
@@ -66,7 +83,15 @@ fn cli_set_overrides_env_file() {
     let dir = temp_project("PORT=3000\n");
     let out = bin()
         .current_dir(dir.path())
-        .args(["--no-env-local", "--set", "PORT=9999", "run", "--", "printenv", "PORT"])
+        .args([
+            "--no-env-local",
+            "--set",
+            "PORT=9999",
+            "run",
+            "--",
+            "printenv",
+            "PORT",
+        ])
         .output()
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "9999");

@@ -55,8 +55,8 @@ pub fn parse(value: &str) -> Result<SecretReference, UriError> {
     let scheme = detect_scheme(value)
         .ok_or_else(|| UriError::Invalid(value.to_string(), "unsupported scheme".into()))?;
 
-    let parsed = url::Url::parse(value)
-        .map_err(|e| UriError::Invalid(value.to_string(), e.to_string()))?;
+    let parsed =
+        url::Url::parse(value).map_err(|e| UriError::Invalid(value.to_string(), e.to_string()))?;
 
     // `url` lowercases hosts for special schemes only; our schemes are not
     // special, so the host is preserved as the authority.
@@ -128,7 +128,10 @@ mod tests {
         assert_eq!(r.fragment.as_deref(), Some("api_key"));
 
         let r = parse("aws-sm://prod/db/password?version_stage=AWSCURRENT").unwrap();
-        assert_eq!(r.query.get("version_stage").map(String::as_str), Some("AWSCURRENT"));
+        assert_eq!(
+            r.query.get("version_stage").map(String::as_str),
+            Some("AWSCURRENT")
+        );
     }
 
     #[test]

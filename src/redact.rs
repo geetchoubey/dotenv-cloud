@@ -42,9 +42,7 @@ impl RedactionPolicy {
         if self.sensitive_keys.iter().any(|k| k == key) {
             return true;
         }
-        self.sensitive_patterns
-            .iter()
-            .any(|p| glob_match(p, key))
+        self.sensitive_patterns.iter().any(|p| glob_match(p, key))
     }
 
     /// Render a value for diagnostics, redacting if sensitive.

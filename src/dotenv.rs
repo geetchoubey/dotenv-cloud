@@ -37,12 +37,18 @@ pub fn parse(content: &str, file_label: &str) -> Result<Vec<DotenvEntry>, Dotenv
         }
 
         // Optional `export ` prefix.
-        let line = line.strip_prefix("export ").map(str::trim_start).unwrap_or(line);
+        let line = line
+            .strip_prefix("export ")
+            .map(str::trim_start)
+            .unwrap_or(line);
 
         let eq = line.find('=').ok_or_else(|| DotenvParseError {
             file: file_label.to_string(),
             line: line_no,
-            message: format!("invalid assignment: expected KEY=VALUE, got `{}`", raw.trim()),
+            message: format!(
+                "invalid assignment: expected KEY=VALUE, got `{}`",
+                raw.trim()
+            ),
         })?;
 
         let key = line[..eq].trim();

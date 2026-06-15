@@ -4,6 +4,7 @@
 //! must be robust against injection. Each shell has its own escaping rules.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)] // "PowerShell" is the canonical shell name.
 pub enum Shell {
     Bash,
     Zsh,

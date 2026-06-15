@@ -12,6 +12,15 @@ use sha2::{Digest, Sha256};
 
 const TARGET: &str = "test-target";
 
+/// Render a path for embedding in a `file://` URL / JSON index.
+///
+/// On Windows `Path::display` yields backslashes, which are invalid escape
+/// sequences inside the JSON index string and would fail to parse. Forward
+/// slashes are valid JSON and are accepted by `std::fs::read` on all platforms.
+fn url_path(p: &Path) -> String {
+    p.display().to_string().replace('\\', "/")
+}
+
 fn bin() -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_dotenv-cloud"));
     c.env("DOTENV_CLOUD_TARGET_OVERRIDE", TARGET);
@@ -69,7 +78,7 @@ fn write_index(dir: &Path, archive: &Path, sha: &str) -> std::path::PathBuf {
             }}
           }}
         }}"#,
-        archive = archive.display(),
+        archive = url_path(archive),
     );
     let path = dir.join("index.json");
     std::fs::File::create(&path)
@@ -84,7 +93,7 @@ fn install_verifies_and_places_provider() {
     let reg = tempfile::tempdir().unwrap();
     let (archive, sha) = build_archive(reg.path());
     let index = write_index(reg.path(), &archive, &sha);
-    let index_url = format!("file://{}", index.display());
+    let index_url = format!("file://{}", url_path(&index));
 
     let proj = tempfile::tempdir().unwrap();
 
@@ -137,7 +146,7 @@ fn install_rejects_sha_mismatch() {
     let reg = tempfile::tempdir().unwrap();
     let (archive, _sha) = build_archive(reg.path());
     let index = write_index(reg.path(), &archive, &"00".repeat(32));
-    let index_url = format!("file://{}", index.display());
+    let index_url = format!("file://{}", url_path(&index));
 
     let proj = tempfile::tempdir().unwrap();
     let out = bin()

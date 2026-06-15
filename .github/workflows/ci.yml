@@ -49,12 +49,12 @@ jobs:
         run: cargo test --locked
 
   msrv:
-    name: minimum supported Rust (1.80)
+    name: minimum supported Rust (1.96)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.80
-        uses: dtolnay/rust-toolchain@1.80
+        uses: dtolnay/rust-toolchain@1.96
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --locked

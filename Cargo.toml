@@ -2,7 +2,7 @@
 name = "dotenv-cloud"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.96"
 description = "CLI that extends dotenv with secure remote secret resolution via external provider plugins"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/geetchoubey/dotenv-cloud"

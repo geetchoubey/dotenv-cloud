@@ -11,10 +11,112 @@ use crate::exec::{self, ExecOptions};
 use crate::export::{self, Shell};
 use crate::merge::Source;
 use crate::pipeline::{self, LoadOptions, MergedEnv, ResolvedEnv};
+use crate::provider::registry::{self, Installer, Scope};
 use crate::provider::{self, ProviderRegistry};
 use crate::redact::{RedactionPolicy, REDACTED};
 use crate::report::Reporter;
 use crate::uri;
+
+/// Default provider registry when none is configured (spec §9, §19).
+const DEFAULT_REGISTRY_URL: &str = "https://providers.dotenv-cloud.dev/index.json";
+
+/// Resolve the registry URL: explicit flag > config > built-in default.
+fn registry_url(ctx: &Ctx, flag: Option<&str>) -> String {
+    flag.map(String::from)
+        .or_else(|| {
+            ctx.config
+                .provider_registry
+                .as_ref()
+                .and_then(|r| r.url.clone())
+        })
+        .unwrap_or_else(|| DEFAULT_REGISTRY_URL.to_string())
+}
+
+/// Resolve the install scope from flags (default: project).
+fn install_scope(project: bool, user: bool) -> Scope {
+    if user && !project {
+        Scope::User
+    } else {
+        Scope::Project
+    }
+}
+
+/// Whether unsigned installs are allowed (flag OR config).
+fn allow_unsigned(ctx: &Ctx, flag: bool) -> bool {
+    flag || ctx
+        .config
+        .provider_registry
+        .as_ref()
+        .map(|r| r.allow_unsigned)
+        .unwrap_or(false)
+}
+
+fn registry_public_key(ctx: &Ctx) -> Option<String> {
+    ctx.config
+        .provider_registry
+        .as_ref()
+        .and_then(|r| r.public_key.clone())
+}
+
+/// Build an installer by loading the registry index.
+fn make_installer(ctx: &Ctx, url: &str, unsigned: bool) -> CliResult<Installer> {
+    Installer::load(url, unsigned, registry_public_key(ctx)).map_err(CliError::Runtime)
+}
+
+/// Install one provider and record it in the lockfile at `lock`.
+fn install_one(
+    ctx: &Ctx,
+    installer: &Installer,
+    name_spec: &str,
+    scope: Scope,
+    lock: &std::path::Path,
+) -> CliResult<()> {
+    let record = installer
+        .install(name_spec, scope)
+        .map_err(CliError::Runtime)?;
+    registry::upsert_lockfile(lock, &record).map_err(CliError::Runtime)?;
+    ctx.reporter.info(&format!("updated {}", lock.display()));
+    println!(
+        "installed {} v{} (schemes: {})",
+        record.package,
+        record.version,
+        record.schemes.join(", ")
+    );
+    Ok(())
+}
+
+/// Detect remote schemes whose provider is not installed and install them from
+/// the registry (used by `run --install-missing-providers`). Signature policy
+/// follows config; unsigned installs require `allow_unsigned`.
+fn install_missing_providers(ctx: &Ctx) -> CliResult<()> {
+    let merged = ctx.merge()?;
+    let installed = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
+
+    let mut packages: Vec<String> = Vec::new();
+    for w in &merged.winners {
+        if w.winning_source == Source::Remote {
+            if let Ok(r) = uri::parse(&w.value) {
+                if !installed.has_scheme(&r.scheme) {
+                    let pkg = provider::suggest_package(&r.scheme).to_string();
+                    if !packages.contains(&pkg) {
+                        packages.push(pkg);
+                    }
+                }
+            }
+        }
+    }
+    if packages.is_empty() {
+        return Ok(());
+    }
+
+    let url = registry_url(ctx, None);
+    let installer = make_installer(ctx, &url, allow_unsigned(ctx, false))?;
+    let lock = PathBuf::from("dotenv-cloud.lock");
+    for pkg in &packages {
+        install_one(ctx, &installer, pkg, Scope::Project, &lock)?;
+    }
+    Ok(())
+}
 
 /// Shared context derived from global flags.
 pub struct Ctx {
@@ -92,6 +194,10 @@ pub async fn run(ctx: &Ctx, args: RunArgs) -> CliResult<i32> {
         return Err(CliError::Usage(
             "missing command; use `dotenv-cloud run -- <command> [args...]`".into(),
         ));
+    }
+
+    if args.install_missing_providers {
+        install_missing_providers(ctx)?;
     }
 
     let resolved = ctx.build_env().await?;
@@ -526,29 +632,50 @@ pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
         }
     }
 
-    // Write a lockfile from currently-installed providers.
     let lockfile = args
         .lockfile
         .unwrap_or_else(|| PathBuf::from("dotenv-cloud.lock"));
-    write_lockfile(&lockfile, &registry)?;
-    println!("wrote {}", lockfile.display());
 
-    if !missing.is_empty() {
-        ctx.reporter.warn(&format!(
-            "{} provider(s) missing. Registry download/verification is not available in this build; \
-             install provider plugins into `.dotenv-cloud/providers` manually.",
-            missing.len()
-        ));
-        let _ = (
-            args.yes,
-            args.project,
-            args.user,
-            args.registry,
-            args.upgrade,
-            args.offline,
-        );
+    // Packages to install: missing schemes, or all (when --upgrade), de-duped.
+    let target_schemes: Vec<&String> = if args.upgrade {
+        schemes.iter().collect()
+    } else {
+        missing.iter().collect()
+    };
+    let mut packages: Vec<String> = Vec::new();
+    for s in &target_schemes {
+        let pkg = provider::suggest_package(s).to_string();
+        if !packages.contains(&pkg) {
+            packages.push(pkg);
+        }
+    }
+
+    if packages.is_empty() {
+        write_lockfile(&lockfile, &registry)?;
+        println!("wrote {}", lockfile.display());
+        return Ok(0);
+    }
+
+    if args.offline {
+        ctx.reporter
+            .warn("--offline: skipping installation of missing providers");
         return Ok(crate::error::ExitCode::Runtime.code());
     }
+
+    if !args.yes {
+        println!("would install: {}", packages.join(", "));
+        ctx.reporter
+            .warn("re-run `dotenv-cloud init --yes` to install the providers above");
+        return Ok(crate::error::ExitCode::Runtime.code());
+    }
+
+    let url = registry_url(ctx, args.registry.as_deref());
+    let installer = make_installer(ctx, &url, allow_unsigned(ctx, false))?;
+    let scope = install_scope(args.project, args.user);
+    for pkg in &packages {
+        install_one(ctx, &installer, pkg, scope, &lockfile)?;
+    }
+    println!("init complete; lockfile at {}", lockfile.display());
     Ok(0)
 }
 
@@ -582,27 +709,90 @@ pub async fn providers(ctx: &Ctx, args: ProvidersArgs) -> CliResult<i32> {
         ProvidersCommand::List(a) => providers_list(ctx, a),
         ProvidersCommand::Info(a) => providers_info(ctx, a),
         ProvidersCommand::Remove(a) => providers_remove(ctx, a),
-        ProvidersCommand::Search { query } => {
-            ctx.reporter.warn(&format!(
-                "registry search is not available in this build (query `{query}`)"
-            ));
-            Ok(crate::error::ExitCode::Runtime.code())
+        ProvidersCommand::Search { query, registry } => {
+            providers_search(ctx, &query, registry.as_deref())
         }
-        ProvidersCommand::Install(a) => {
-            ctx.reporter.warn(&format!(
-                "registry install is not available in this build; install `{}` plugin into `.dotenv-cloud/providers` manually",
-                a.name
-            ));
-            Ok(crate::error::ExitCode::Runtime.code())
-        }
-        ProvidersCommand::Update(a) => {
-            ctx.reporter.warn(&format!(
-                "registry update is not available in this build{}",
-                a.name.map(|n| format!(" ({n})")).unwrap_or_default()
-            ));
-            Ok(crate::error::ExitCode::Runtime.code())
+        ProvidersCommand::Install(a) => providers_install(ctx, a),
+        ProvidersCommand::Update(a) => providers_update(ctx, a),
+    }
+}
+
+fn providers_search(ctx: &Ctx, query: &str, registry: Option<&str>) -> CliResult<i32> {
+    let url = registry_url(ctx, registry);
+    let installer = make_installer(ctx, &url, true)?;
+    let q = query.to_ascii_lowercase();
+    let mut hits = 0;
+    for (name, p) in &installer.index.providers {
+        let hay = format!(
+            "{name} {} {} {}",
+            p.package,
+            p.description.clone().unwrap_or_default(),
+            p.schemes.join(" ")
+        )
+        .to_ascii_lowercase();
+        if q.is_empty() || hay.contains(&q) {
+            hits += 1;
+            let latest = p
+                .select_version(None)
+                .map(|(v, _)| v)
+                .unwrap_or_else(|_| "?".into());
+            println!(
+                "{name:<16} {} v{latest}  schemes={}",
+                p.package,
+                p.schemes.join(",")
+            );
         }
     }
+    if hits == 0 {
+        println!("no providers matched `{query}`");
+    }
+    Ok(0)
+}
+
+fn providers_install(ctx: &Ctx, a: ProvidersTargetArgs) -> CliResult<i32> {
+    let url = registry_url(ctx, a.registry.as_deref());
+    let installer = make_installer(ctx, &url, allow_unsigned(ctx, a.allow_unsigned))?;
+    let lock = PathBuf::from("dotenv-cloud.lock");
+    install_one(
+        ctx,
+        &installer,
+        &a.name,
+        install_scope(a.project, a.user),
+        &lock,
+    )?;
+    Ok(0)
+}
+
+fn providers_update(ctx: &Ctx, a: ProvidersOptionalTargetArgs) -> CliResult<i32> {
+    let url = registry_url(ctx, a.registry.as_deref());
+    let installer = make_installer(ctx, &url, allow_unsigned(ctx, a.allow_unsigned))?;
+    let scope = install_scope(a.project, a.user);
+    let lock = PathBuf::from("dotenv-cloud.lock");
+
+    match a.name {
+        Some(name) => install_one(ctx, &installer, &name, scope, &lock)?,
+        None => {
+            // Update every installed provider that the registry knows about.
+            let installed = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
+            let mut updated = 0;
+            for p in installed.installed() {
+                // Match by package name against the index.
+                if let Some((short, _)) = installer
+                    .index
+                    .providers
+                    .iter()
+                    .find(|(_, ip)| ip.package == p.manifest.name)
+                {
+                    install_one(ctx, &installer, short, scope, &lock)?;
+                    updated += 1;
+                }
+            }
+            if updated == 0 {
+                println!("no installed providers found in the registry");
+            }
+        }
+    }
+    Ok(0)
 }
 
 fn providers_list(ctx: &Ctx, a: ProvidersCommonArgs) -> CliResult<i32> {

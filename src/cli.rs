@@ -247,7 +247,11 @@ pub enum ProvidersCommand {
     /// List installed providers and configured schemes.
     List(ProvidersCommonArgs),
     /// Search configured provider registries.
-    Search { query: String },
+    Search {
+        query: String,
+        #[arg(long, value_name = "url")]
+        registry: Option<String>,
+    },
     /// Download, verify, and install a provider plugin.
     Install(ProvidersTargetArgs),
     /// Update one or all installed providers.
@@ -277,13 +281,23 @@ pub struct ProvidersTargetArgs {
     pub user: bool,
     #[arg(long)]
     pub yes: bool,
+    /// Allow installing providers without a verified signature.
+    #[arg(long)]
+    pub allow_unsigned: bool,
 }
 
 #[derive(Debug, Args)]
 pub struct ProvidersOptionalTargetArgs {
     pub name: Option<String>,
-    #[arg(long)]
+    #[arg(long, value_name = "url")]
     pub registry: Option<String>,
     #[arg(long)]
+    pub project: bool,
+    #[arg(long)]
+    pub user: bool,
+    #[arg(long)]
     pub yes: bool,
+    /// Allow installing providers without a verified signature.
+    #[arg(long)]
+    pub allow_unsigned: bool,
 }

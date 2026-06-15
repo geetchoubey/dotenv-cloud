@@ -3,6 +3,7 @@
 pub mod host;
 pub mod manifest;
 pub mod protocol;
+pub mod registry;
 
 use std::collections::HashMap;
 use std::time::Duration;

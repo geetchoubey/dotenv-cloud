@@ -1,0 +1,11 @@
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# dotenv-cloud runtime artifacts
+.env.resolved
+.dotenv-cloud/providers/
+
+# OS / editor
+.DS_Store
+*.swp

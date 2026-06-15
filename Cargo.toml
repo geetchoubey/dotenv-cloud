@@ -1,0 +1,34 @@
+[package]
+name = "dotenv-cloud"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "CLI that extends dotenv with secure remote secret resolution via external provider plugins"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/geetchoubey/dotenv-cloud"
+default-run = "dotenv-cloud"
+
+[[bin]]
+name = "dotenv-cloud"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+url = "2"
+thiserror = "1"
+anyhow = "1"
+secrecy = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "time", "sync"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

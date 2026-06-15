@@ -1,0 +1,57 @@
+# Example dotenv-cloud configuration (spec §9.2, §19).
+
+default_profile = "dev"
+
+[profile.dev]
+env_file = ".env"
+env_local_file = ".env.local"
+
+[profile.staging]
+env_file = ".env.staging"
+env_local_file = ".env.staging.local"
+
+[profile.prod]
+env_file = ".env.production"
+env_local_file = ".env.production.local"
+
+[defaults]
+LOG_LEVEL = "info"
+PORT = "3000"
+
+# Highest precedence first. Omitted sources keep their default relative order.
+[precedence]
+order = ["cli", "system", "remote", "env.local", "env", "defaults"]
+
+[providers.aws]
+region = "us-east-1"
+profile = "dev"
+timeout_ms = 2000
+
+[providers.aws.ssm]
+with_decryption = true
+
+[providers.vault]
+address = "https://vault.example.com"
+auth_method = "token"
+token_env = "VAULT_TOKEN"
+timeout_ms = 2000
+
+[providers.vault.kv]
+default_version = "v2"
+
+[provider_registry]
+url = "https://providers.dotenv-cloud.dev/index.json"
+allow_unsigned = false
+install_scope = "project"
+
+[resolution]
+missing = "error"   # error | warn | ignore
+concurrency = 8
+
+[conflicts]
+warn_on_any_shadow = false
+error_on_shadow = []
+
+[sensitive]
+keys = ["DB_PASSWORD", "API_KEY"]
+patterns = ["*_TOKEN", "*_SECRET"]

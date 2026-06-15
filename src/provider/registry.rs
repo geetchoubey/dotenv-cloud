@@ -198,8 +198,8 @@ pub fn verify_signature(
 /// default. Populated at release time with the project release key; empty
 /// entries are ignored (e.g. before a key is provisioned).
 const TRUSTED_PUBLIC_KEYS: &[&str] = &[
-    // dotenv-cloud release signing key.
-    "",
+    // dotenv-cloud release signing key (v0.1.0-beta.3+).
+    "5DW5vjULQM5KcwDDVd2vZZroPZILFt1UM3F4v5KmS/I=",
 ];
 
 /// All trusted public keys: the built-in release key(s) plus any extra key

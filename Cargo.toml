@@ -1,6 +1,6 @@
 [package]
 name = "dotenv-cloud"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 edition = "2021"
 rust-version = "1.96"
 description = "CLI that extends dotenv with secure remote secret resolution via external provider plugins"

@@ -18,7 +18,7 @@ use crate::report::Reporter;
 use crate::uri;
 
 /// Default provider registry when none is configured (spec §9, §19).
-const DEFAULT_REGISTRY_URL: &str = "https://providers.dotenv-cloud.dev/index.json";
+const DEFAULT_REGISTRY_URL: &str = "https://geetchoubey.github.io/dotenv-cloud/index.json";
 
 /// Resolve the registry URL: explicit flag > config > built-in default.
 fn registry_url(ctx: &Ctx, flag: Option<&str>) -> String {
@@ -889,6 +889,41 @@ fn providers_remove(ctx: &Ctx, a: ProvidersTargetArgs) -> CliResult<i32> {
             Ok(0)
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// keygen / sign (maintainer + CI signing tools)
+// ---------------------------------------------------------------------------
+
+/// Generate an ed25519 release signing keypair and print it. The private key is
+/// stored as a CI secret (`DOTENV_CLOUD_SIGNING_KEY`); the public key is baked
+/// into the CLI's trusted-keys list.
+pub fn keygen() -> CliResult<i32> {
+    let (private_b64, public_b64) = registry::generate_keypair().map_err(CliError::Runtime)?;
+    println!("# dotenv-cloud release signing keypair (ed25519)");
+    println!("# PRIVATE KEY — store as the DOTENV_CLOUD_SIGNING_KEY CI secret; never commit it.");
+    println!("private_key = {private_b64}");
+    println!("# PUBLIC KEY — add to TRUSTED_PUBLIC_KEYS in src/provider/registry.rs.");
+    println!("public_key = {public_b64}");
+    Ok(0)
+}
+
+/// Sign a file's bytes with an ed25519 private key, emitting a base64 signature.
+pub fn sign(args: SignArgs) -> CliResult<i32> {
+    let key = args.key.ok_or_else(|| {
+        CliError::Usage("no signing key; pass --key or set DOTENV_CLOUD_SIGNING_KEY".to_string())
+    })?;
+    let bytes = std::fs::read(&args.file)
+        .map_err(|e| CliError::Runtime(format!("cannot read {}: {e}", args.file.display())))?;
+    let sig = registry::sign_bytes(&key, &bytes).map_err(CliError::Runtime)?;
+    match &args.out {
+        Some(path) => {
+            std::fs::write(path, format!("{sig}\n"))
+                .map_err(|e| CliError::Runtime(format!("cannot write {}: {e}", path.display())))?;
+        }
+        None => println!("{sig}"),
+    }
+    Ok(0)
 }
 
 // ---------------------------------------------------------------------------

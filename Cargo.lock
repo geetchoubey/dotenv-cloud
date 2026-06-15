@@ -253,13 +253,14 @@ dependencies = [
 
 [[package]]
 name = "dotenv-cloud"
-version = "0.1.0-beta.2"
+version = "0.1.0-beta.3"
 dependencies = [
  "anyhow",
  "base64",
  "clap",
  "ed25519-dalek",
  "flate2",
+ "getrandom 0.2.17",
  "secrecy",
  "semver",
  "serde",

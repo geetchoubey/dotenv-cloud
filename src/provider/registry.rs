@@ -193,6 +193,62 @@ pub fn verify_signature(
         .map_err(|_| "signature verification failed".to_string())
 }
 
+/// Built-in trusted ed25519 public keys (base64). Artifacts signed by any of
+/// these verify with no user configuration, so signature verification is on by
+/// default. Populated at release time with the project release key; empty
+/// entries are ignored (e.g. before a key is provisioned).
+const TRUSTED_PUBLIC_KEYS: &[&str] = &[
+    // dotenv-cloud release signing key.
+    "",
+];
+
+/// All trusted public keys: the built-in release key(s) plus any extra key
+/// configured for a custom/private registry.
+fn trusted_keys(extra: Option<&str>) -> Vec<String> {
+    let mut keys: Vec<String> = TRUSTED_PUBLIC_KEYS
+        .iter()
+        .filter(|k| !k.trim().is_empty())
+        .map(|k| k.trim().to_string())
+        .collect();
+    if let Some(k) = extra {
+        let k = k.trim();
+        if !k.is_empty() {
+            keys.push(k.to_string());
+        }
+    }
+    keys
+}
+
+/// Generate a fresh ed25519 keypair, returned as `(private_b64, public_b64)`.
+/// The private key is the 32-byte seed; the public key is the 32-byte verifying
+/// key. Used by `dotenv-cloud keygen`.
+pub fn generate_keypair() -> Result<(String, String), String> {
+    use ed25519_dalek::SigningKey;
+    let mut seed = [0u8; 32];
+    getrandom::getrandom(&mut seed).map_err(|e| format!("rng error: {e}"))?;
+    let sk = SigningKey::from_bytes(&seed);
+    let vk = sk.verifying_key();
+    let b64 = base64::engine::general_purpose::STANDARD;
+    Ok((b64.encode(sk.to_bytes()), b64.encode(vk.to_bytes())))
+}
+
+/// Sign `bytes` with a base64 ed25519 private key (32-byte seed), returning a
+/// base64 signature compatible with [`verify_signature`]. Used by
+/// `dotenv-cloud sign`.
+pub fn sign_bytes(private_key_b64: &str, bytes: &[u8]) -> Result<String, String> {
+    use ed25519_dalek::{Signer, SigningKey};
+    let key_bytes = base64::engine::general_purpose::STANDARD
+        .decode(private_key_b64.trim())
+        .map_err(|e| format!("invalid private key base64: {e}"))?;
+    let key_arr: [u8; 32] = key_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| "private key must be 32 bytes".to_string())?;
+    let sk = SigningKey::from_bytes(&key_arr);
+    let sig = sk.sign(bytes);
+    Ok(base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()))
+}
+
 // ---------------------------------------------------------------------------
 // Installer
 // ---------------------------------------------------------------------------
@@ -273,17 +329,31 @@ impl Installer {
             ));
         }
 
-        match (&artifact.signature, &self.public_key) {
-            (Some(sig), Some(pk)) => verify_signature(&bytes, sig, pk)?,
-            (Some(_), None) => {
-                if !self.allow_unsigned {
+        // Signature policy. By default every artifact must carry a signature
+        // that verifies against a trusted key (built-in release key or a key
+        // configured for a custom registry). `--allow-unsigned` relaxes this.
+        let keys = trusted_keys(self.public_key.as_deref());
+        match &artifact.signature {
+            Some(sig) => {
+                if keys.is_empty() {
+                    if !self.allow_unsigned {
+                        return Err(format!(
+                            "{} is signed but no trusted public key is available to verify it; \
+                             set [provider_registry].public_key or pass --allow-unsigned",
+                            provider.package
+                        ));
+                    }
+                } else if !keys
+                    .iter()
+                    .any(|k| verify_signature(&bytes, sig, k).is_ok())
+                {
                     return Err(format!(
-                        "{} is signed but no [provider_registry].public_key is configured to verify it",
+                        "signature verification failed for {} (not signed by a trusted key)",
                         provider.package
                     ));
                 }
             }
-            (None, _) => {
+            None => {
                 if !self.allow_unsigned {
                     return Err(format!(
                         "{} has no signature; pass --allow-unsigned or set allow_unsigned=true to install unsigned providers",
@@ -470,6 +540,22 @@ mod tests {
 
         assert!(verify_signature(data, &sig_b64, &pk_b64).is_ok());
         assert!(verify_signature(b"tampered", &sig_b64, &pk_b64).is_err());
+    }
+
+    #[test]
+    fn keygen_then_sign_then_verify() {
+        let (priv_b64, pub_b64) = generate_keypair().unwrap();
+        let data = b"provider-archive.tar.gz";
+        let sig = sign_bytes(&priv_b64, data).unwrap();
+        assert!(verify_signature(data, &sig, &pub_b64).is_ok());
+        assert!(verify_signature(b"other", &sig, &pub_b64).is_err());
+    }
+
+    #[test]
+    fn generated_keys_are_unique() {
+        let (a, _) = generate_keypair().unwrap();
+        let (b, _) = generate_keypair().unwrap();
+        assert_ne!(a, b);
     }
 
     #[test]

@@ -15,10 +15,26 @@ dotenv-cloud init --yes                       # install providers for detected s
 dotenv-cloud run --install-missing-providers -- <cmd>
 ```
 
+The default registry is published at
+`https://geetchoubey.github.io/dotenv-cloud/index.json`.
+
 Install flow: fetch index → select version (latest by semver, or pinned) →
 select the current build target → download archive → **verify sha256** →
-**verify ed25519 signature** (if present) → unpack → place `manifest.toml` +
-executable under the provider dir → upsert `dotenv-cloud.lock`.
+**verify ed25519 signature against a trusted key** → unpack → place
+`manifest.toml` + executable under the provider dir → upsert `dotenv-cloud.lock`.
+
+## How the index is produced
+
+The index is generated, not hand-edited. A GitHub Actions workflow
+(`.github/workflows/registry.yml`) runs `registry/generate.py`, which reads the
+provider catalog (`registry/providers.json`), queries each provider repo's
+public GitHub Releases, and assembles `index.json` from the published
+`.tar.gz` artifacts plus their `.sha256` / `.sig` sidecar assets. The result is
+deployed to GitHub Pages.
+
+It refreshes on: a manual run, a `repository_dispatch` (`registry-refresh`)
+pushed by a provider's release workflow, completion of this repo's `Release`
+workflow, and an hourly schedule.
 
 ## Index format
 
@@ -58,18 +74,25 @@ executable under the provider dir → upsert `dotenv-cloud.lock`.
 
 - **sha256 is mandatory** — a mismatch aborts the install.
 - **Signatures are ed25519** over the raw archive bytes, base64-encoded in the
-  index `signature` field. Configure the trusted key to enable verification:
+  index `signature` field. The CLI ships with the project's **built-in trusted
+  public key**, so signature verification is **on by default** with no
+  configuration: a signed artifact must verify against a trusted key or the
+  install is refused.
+- Release artifacts are signed in CI. The maintainer holds the private key
+  (`DOTENV_CLOUD_SIGNING_KEY` secret); the matching public key is baked into the
+  CLI (`TRUSTED_PUBLIC_KEYS` in `src/provider/registry.rs`). Generate a keypair
+  with `dotenv-cloud keygen`; sign a file with `dotenv-cloud sign <file>`.
+- A **custom/private registry** can add its own trusted key via config:
 
   ```toml
   [provider_registry]
-  url = "https://providers.dotenv-cloud.dev/index.json"
-  public_key = "<base64 ed25519 public key>"
+  url = "https://geetchoubey.github.io/dotenv-cloud/index.json"
+  public_key = "<base64 ed25519 public key>"   # in addition to the built-in key
   allow_unsigned = false
   ```
 
-- If an archive has **no signature** (or is signed but no `public_key` is
-  configured), the install is **refused** unless `allow_unsigned = true` or
-  `--allow-unsigned` is passed.
+- If an archive has **no signature**, the install is **refused** unless
+  `allow_unsigned = true` or `--allow-unsigned` is passed.
 
 ## Install scope
 

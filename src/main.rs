@@ -66,6 +66,13 @@ fn real_main() -> i32 {
 }
 
 async fn dispatch(cli: Cli) -> Result<i32, CliError> {
+    // Maintainer crypto tools need no config or environment context.
+    match cli.command {
+        Command::Keygen => return commands::keygen(),
+        Command::Sign(args) => return commands::sign(args),
+        _ => {}
+    }
+
     let ctx = Ctx::from_global(&cli.global)?;
 
     match cli.command {
@@ -77,5 +84,6 @@ async fn dispatch(cli: Cli) -> Result<i32, CliError> {
         Command::Doctor => commands::doctor(&ctx).await,
         Command::Init(args) => commands::init(&ctx, args).await,
         Command::Providers(args) => commands::providers(&ctx, args).await,
+        Command::Keygen | Command::Sign(_) => unreachable!("handled before ctx"),
     }
 }

@@ -138,6 +138,26 @@ pub enum Command {
     Doctor,
     /// Manage externally installed provider plugins.
     Providers(ProvidersArgs),
+    /// Generate an ed25519 release signing keypair (maintainer tool).
+    #[command(hide = true)]
+    Keygen,
+    /// Sign a file with an ed25519 private key, printing a base64 signature
+    /// (maintainer/CI tool).
+    #[command(hide = true)]
+    Sign(SignArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SignArgs {
+    /// File to sign (its raw bytes are signed).
+    pub file: PathBuf,
+    /// base64 ed25519 private key. If omitted, read from
+    /// `DOTENV_CLOUD_SIGNING_KEY`.
+    #[arg(long, value_name = "b64", env = "DOTENV_CLOUD_SIGNING_KEY")]
+    pub key: Option<String>,
+    /// Write the signature to this path instead of stdout.
+    #[arg(long, value_name = "path")]
+    pub out: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

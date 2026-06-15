@@ -1,0 +1,13 @@
+{
+  "comment": "Source-of-truth catalog for the dotenv-cloud provider registry. The generator scans each repo's GitHub Releases and emits index.json from this metadata plus the published artifacts.",
+  "providers": [
+    {
+      "name": "aws",
+      "repo": "geetchoubey/dotenv-cloud-provider-aws",
+      "package": "dotenv-cloud-provider-aws",
+      "bin_prefix": "dotenv-cloud-provider-aws",
+      "schemes": ["aws-sm", "aws-ssm"],
+      "description": "AWS Secrets Manager and SSM Parameter Store provider for dotenv-cloud"
+    }
+  ]
+}

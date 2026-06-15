@@ -1,0 +1,54 @@
+name: Registry
+
+# Regenerates the provider registry index.json and publishes it to GitHub Pages.
+# Triggers:
+#   - workflow_dispatch: manual "Run workflow" button (instant refresh).
+#   - repository_dispatch (registry-refresh): pushed by a provider release.
+#   - workflow_run after Release: refresh when the core repo itself releases.
+#   - schedule: hourly fallback so new releases appear without a push.
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [registry-refresh]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  schedule:
+    - cron: "0 * * * *"
+
+# Required for the GitHub Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Generate index.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 registry/generate.py _site
+
+      - name: Copy landing page
+        run: cp registry/index.html _site/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

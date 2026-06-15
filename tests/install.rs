@@ -141,6 +141,124 @@ fn install_verifies_and_places_provider() {
     assert!(lock.contains(&sha));
 }
 
+/// Parse `key = value` lines emitted by `dotenv-cloud keygen`.
+fn keygen() -> (String, String) {
+    let out = bin().arg("keygen").output().unwrap();
+    assert!(out.status.success());
+    let text = String::from_utf8(out.stdout).unwrap();
+    let mut private = String::new();
+    let mut public = String::new();
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix("private_key = ") {
+            private = v.trim().to_string();
+        } else if let Some(v) = line.strip_prefix("public_key = ") {
+            public = v.trim().to_string();
+        }
+    }
+    assert!(!private.is_empty() && !public.is_empty(), "keygen: {text}");
+    (private, public)
+}
+
+/// Sign a file with `dotenv-cloud sign`, returning the base64 signature.
+fn sign(archive: &Path, private_key: &str) -> String {
+    let out = bin()
+        .args(["sign", &archive.display().to_string(), "--key", private_key])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "sign failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+fn write_signed_index(dir: &Path, archive: &Path, sha: &str, sig: &str) -> std::path::PathBuf {
+    let index = format!(
+        r#"{{
+          "schema_version": 1,
+          "providers": {{
+            "aws": {{
+              "package": "dotenv-cloud-provider-fake",
+              "schemes": ["aws-sm", "aws-ssm"],
+              "versions": {{
+                "0.1.0": {{ "targets": {{
+                  "{TARGET}": {{ "url": "file://{archive}", "sha256": "{sha}", "signature": "{sig}" }}
+                }} }}
+              }}
+            }}
+          }}
+        }}"#,
+        archive = url_path(archive),
+    );
+    let path = dir.join("index.json");
+    std::fs::File::create(&path)
+        .unwrap()
+        .write_all(index.as_bytes())
+        .unwrap();
+    path
+}
+
+#[test]
+fn signed_install_verifies_against_configured_key() {
+    let reg = tempfile::tempdir().unwrap();
+    let (archive, sha) = build_archive(reg.path());
+    let (private, public) = keygen();
+    let sig = sign(&archive, &private);
+    let index = write_signed_index(reg.path(), &archive, &sha, &sig);
+    let index_url = format!("file://{}", url_path(&index));
+
+    let proj = tempfile::tempdir().unwrap();
+    // Trust the signing key via config; no --allow-unsigned needed.
+    std::fs::write(
+        proj.path().join("dotenv-cloud.toml"),
+        format!("[provider_registry]\npublic_key = \"{public}\"\n"),
+    )
+    .unwrap();
+
+    let ok = bin()
+        .current_dir(proj.path())
+        .args(["providers", "install", "aws", "--registry", &index_url])
+        .output()
+        .unwrap();
+    assert!(
+        ok.status.success(),
+        "signed install should succeed; stderr: {}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+    assert!(proj
+        .path()
+        .join(".dotenv-cloud/providers/aws/manifest.toml")
+        .is_file());
+}
+
+#[test]
+fn signed_install_rejects_bad_signature() {
+    let reg = tempfile::tempdir().unwrap();
+    let (archive, sha) = build_archive(reg.path());
+    let (_private, public) = keygen();
+    // A valid-shape signature from a *different* key won't verify.
+    let (other_private, _) = keygen();
+    let bad_sig = sign(&archive, &other_private);
+    let index = write_signed_index(reg.path(), &archive, &sha, &bad_sig);
+    let index_url = format!("file://{}", url_path(&index));
+
+    let proj = tempfile::tempdir().unwrap();
+    std::fs::write(
+        proj.path().join("dotenv-cloud.toml"),
+        format!("[provider_registry]\npublic_key = \"{public}\"\n"),
+    )
+    .unwrap();
+
+    let out = bin()
+        .current_dir(proj.path())
+        .args(["providers", "install", "aws", "--registry", &index_url])
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "bad signature must be rejected");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("signature verification failed"));
+}
+
 #[test]
 fn install_rejects_sha_mismatch() {
     let reg = tempfile::tempdir().unwrap();

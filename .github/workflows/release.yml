@@ -106,11 +106,36 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+
+      # Build a host-native signer from this same source and sign every archive.
+      - name: Build signer
+        run: cargo build --release --locked --bin dotenv-cloud
+
+      - name: Sign archives
+        env:
+          DOTENV_CLOUD_SIGNING_KEY: ${{ secrets.DOTENV_CLOUD_SIGNING_KEY }}
+        run: |
+          if [ -z "$DOTENV_CLOUD_SIGNING_KEY" ]; then
+            echo "::error::DOTENV_CLOUD_SIGNING_KEY secret is not set" >&2
+            exit 1
+          fi
+          shopt -s nullglob
+          for f in dist/*.tar.gz dist/*.zip; do
+            ./target/release/dotenv-cloud sign "$f" --out "$f.sig"
+            echo "signed $f"
+          done
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3
@@ -120,5 +145,7 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
+            dist/*.tar.gz.sig
             dist/*.zip
             dist/*.zip.sha256
+            dist/*.zip.sig

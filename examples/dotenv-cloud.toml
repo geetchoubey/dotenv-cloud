@@ -1,10 +1,49 @@
-# Example dotenv-cloud configuration (spec §9.2, §19).
+# =============================================================================
+# dotenv-cloud configuration — annotated reference (spec §9, §19)
+# =============================================================================
+#
+# This file documents every option the core recognizes. Most keys are optional;
+# the values shown are illustrative, not required. Defaults are noted inline.
+#
+# Discovery (when --config / DOTENV_CLOUD_CONFIG are not set): dotenv-cloud
+# searches the current directory and walks up parent directories for the first
+# file literally named `dotenv-cloud.toml`. The file MUST have this name to be
+# auto-discovered — a differently named file is only used via `--config <path>`
+# or the DOTENV_CLOUD_CONFIG environment variable.
+#
+# Unknown top-level keys (and unknown keys in most sections) are REJECTED, so
+# typos surface during `dotenv-cloud validate` rather than being silently
+# ignored. The exception is the per-provider tables under [providers.*], whose
+# contents are free-form and passed through to the provider plugin.
+#
+# Relevant environment variables:
+#   DOTENV_CLOUD_CONFIG  — absolute/relative path to a config file (skips discovery)
+#   DOTENV_CLOUD_PROFILE — active profile name (overrides default_profile; beaten by --profile)
+#   DOTENV_CLOUD_TARGET_OVERRIDE — override the build target triple (testing only)
+# =============================================================================
 
+
+# -----------------------------------------------------------------------------
+# Active profile
+# -----------------------------------------------------------------------------
+# Profile selected when neither `--profile` nor DOTENV_CLOUD_PROFILE is given.
+# Resolution order: --profile flag > DOTENV_CLOUD_PROFILE > default_profile > "dev".
+# Optional; omit to fall back to "dev".
 default_profile = "dev"
 
+
+# -----------------------------------------------------------------------------
+# Profiles  [profile.<name>]
+# -----------------------------------------------------------------------------
+# Each profile names the dotenv files to load for that environment. Both keys
+# are optional; when a profile (or the whole [profile.*] section) is omitted,
+# the defaults below are used.
+#
+# Only these two keys are allowed per profile (unknown keys are rejected).
+
 [profile.dev]
-env_file = ".env"
-env_local_file = ".env.local"
+env_file = ".env"              # primary env file        (default: ".env")
+env_local_file = ".env.local"  # gitignored local overrides (default: ".env.local")
 
 [profile.staging]
 env_file = ".env.staging"
@@ -14,44 +53,147 @@ env_local_file = ".env.staging.local"
 env_file = ".env.production"
 env_local_file = ".env.production.local"
 
+
+# -----------------------------------------------------------------------------
+# Built-in defaults  [defaults]
+# -----------------------------------------------------------------------------
+# Static fallback values, lowest precedence by default (see [precedence]). Used
+# when a key is not provided by any higher-precedence source. Free-form string
+# key/value pairs; values must be strings.
+
 [defaults]
 LOG_LEVEL = "info"
 PORT = "3000"
 
-# Highest precedence first. Omitted sources keep their default relative order.
+
+# -----------------------------------------------------------------------------
+# Precedence  [precedence]
+# -----------------------------------------------------------------------------
+# Controls which source wins when the same key is defined in more than one
+# place. List sources highest-precedence first. Any source you omit keeps its
+# default relative order behind the ones you list.
+#
+# Allowed source identifiers (exactly these; unknown values are rejected):
+#   cli        — values passed via `--set KEY=VALUE` on the command line
+#   system     — variables already present in the process environment
+#   remote     — values resolved from secret references (aws-sm://, vault://, …)
+#   env.local  — the profile's env_local_file
+#   env        — the profile's env_file
+#   defaults   — the [defaults] table above
+#
+# The list must not contain duplicates. Omit the whole section to use the
+# built-in default order shown here.
+
 [precedence]
 order = ["cli", "system", "remote", "env.local", "env", "defaults"]
 
+
+# -----------------------------------------------------------------------------
+# Providers  [providers.*]
+# -----------------------------------------------------------------------------
+# Per-provider configuration passed straight through to the provider plugin as
+# the `provider_config` object during secret resolution. The CORE does not
+# validate the keys inside these tables — they are defined by each provider
+# plugin — so the keys below are examples of what the bundled AWS and Vault
+# providers understand, not a fixed schema.
+
+# AWS provider (schemes: aws-sm, aws-ssm) — referenced as aws-sm://… / aws-ssm://…
 [providers.aws]
-region = "us-east-1"
-profile = "dev"
-timeout_ms = 2000
+region = "us-east-1"   # AWS region for the API calls
+profile = "default"    # named profile from ~/.aws/credentials (omit to use the default chain)
+timeout_ms = 2000      # per-request timeout in milliseconds
 
+# AWS SSM Parameter Store sub-options (used for aws-ssm:// references)
 [providers.aws.ssm]
-with_decryption = true
+with_decryption = true # decrypt SecureString parameters
 
+# HashiCorp Vault provider (scheme: vault) — referenced as vault://…
 [providers.vault]
-address = "https://vault.example.com"
-auth_method = "token"
-token_env = "VAULT_TOKEN"
-timeout_ms = 2000
+address = "https://vault.example.com"  # Vault server address
+auth_method = "token"                   # auth method (e.g. "token")
+token_env = "VAULT_TOKEN"               # env var holding the Vault token
+timeout_ms = 2000                       # per-request timeout in milliseconds
 
+# Vault KV engine sub-options
 [providers.vault.kv]
-default_version = "v2"
+default_version = "v2"  # KV secrets-engine version ("v1" | "v2")
+
+# Explicit provider plugin paths, keyed by provider short name. Takes priority
+# over discovered providers (project-local `.dotenv-cloud/providers/` then the
+# user provider directory). Point at the directory containing the plugin's
+# `manifest.toml`, or directly at the executable. Optional; usually unset.
+[providers.paths]
+# aws = "/opt/dotenv-cloud/providers/aws"
+# vault = "/opt/dotenv-cloud/providers/vault/dotenv-cloud-provider-vault"
+
+
+# -----------------------------------------------------------------------------
+# Provider registry  [provider_registry]
+# -----------------------------------------------------------------------------
+# Controls `dotenv-cloud providers install`, `init`, and
+# `run --install-missing-providers`. All keys optional.
 
 [provider_registry]
-url = "https://providers.dotenv-cloud.dev/index.json"
+# Registry index URL. Supports https://, file://, or a local path. A --registry
+# flag on the command line overrides this. (default: the public registry)
+url = "https://geetchoubey.github.io/dotenv-cloud/index.json"
+
+# Allow installing providers that are unsigned. By default the CLI verifies
+# every artifact's ed25519 signature against its built-in trusted key, so this
+# is only needed for unsigned/custom archives. Equivalent to passing
+# --allow-unsigned. (default: false)
 allow_unsigned = false
+
+# Default install location: "project" (./.dotenv-cloud/providers) or "user"
+# (the platform user provider dir). Part of the spec schema; in the V1 core the
+# effective scope is taken from the `--project` / `--user` CLI flags.
 install_scope = "project"
 
+# Additional base64-encoded ed25519 public key trusted to verify signed
+# provider archives, on top of the CLI's built-in release key. Use this only for
+# a custom/private registry signed with your own key. Optional.
+# public_key = "MCowBQYDK2VwAyEA...base64..."
+
+
+# -----------------------------------------------------------------------------
+# Resolution  [resolution]
+# -----------------------------------------------------------------------------
+# How remote secret resolution behaves.
+
 [resolution]
-missing = "error"   # error | warn | ignore
+# What to do when a referenced secret cannot be found:
+#   error  — fail the command (default)
+#   warn   — emit a warning and skip the key
+#   ignore — silently skip the key
+missing = "error"
+
+# Maximum number of concurrent provider resolutions. (default: 8)
 concurrency = 8
 
+
+# -----------------------------------------------------------------------------
+# Conflicts  [conflicts]
+# -----------------------------------------------------------------------------
+# Diagnostics for keys that are shadowed (defined in more than one source, where
+# a higher-precedence source wins over a lower one).
+
 [conflicts]
+# Warn whenever ANY key is shadowed across sources. (default: false)
 warn_on_any_shadow = false
+
+# Treat shadowing of these specific keys as a hard error. (default: [])
 error_on_shadow = []
 
+
+# -----------------------------------------------------------------------------
+# Sensitive values  [sensitive]
+# -----------------------------------------------------------------------------
+# Marks keys whose values must be redacted in all diagnostic output. Values
+# resolved from remote references are always redacted regardless of this list.
+
 [sensitive]
+# Exact key names (also matched as case-insensitive substrings) to redact.
 keys = ["DB_PASSWORD", "API_KEY"]
+
+# Glob patterns; any key matching a pattern is redacted.
 patterns = ["*_TOKEN", "*_SECRET"]

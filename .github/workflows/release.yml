@@ -149,3 +149,43 @@ jobs:
             dist/*.zip
             dist/*.zip.sha256
             dist/*.zip.sig
+
+      # Regenerate the Homebrew formula from the template and push it to the tap.
+      # Requires a PAT with contents:write on geetchoubey/homebrew-tap.
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN not set; skipping Homebrew tap update"
+            exit 0
+          fi
+          tag="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          ver="${tag#v}"
+          base="https://github.com/${{ github.repository }}/releases/download/$tag"
+          sha() { awk '{print $1}' "dist/dotenv-cloud-${tag}-$1.tar.gz.sha256"; }
+          sed \
+            -e "s|__VERSION__|${ver}|g" \
+            -e "s|__TAG__|${tag}|g" \
+            -e "s|__BASE__|${base}|g" \
+            -e "s|__MAC_ARM_SHA__|$(sha aarch64-apple-darwin)|g" \
+            -e "s|__MAC_X86_SHA__|$(sha x86_64-apple-darwin)|g" \
+            -e "s|__LIN_ARM_SHA__|$(sha aarch64-unknown-linux-gnu)|g" \
+            -e "s|__LIN_X86_SHA__|$(sha x86_64-unknown-linux-gnu)|g" \
+            registry/homebrew-formula.rb.tmpl > /tmp/dotenv-cloud.rb
+
+          git clone --depth 1 \
+            "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/geetchoubey/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp /tmp/dotenv-cloud.rb tap/Formula/dotenv-cloud.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/dotenv-cloud.rb
+          if git diff --cached --quiet; then
+            echo "formula already up to date"
+          else
+            git commit -m "dotenv-cloud ${ver}"
+            git push
+            echo "updated Homebrew tap to ${ver}"
+          fi

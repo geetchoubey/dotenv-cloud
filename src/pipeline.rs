@@ -53,11 +53,7 @@ pub struct ResolvedEnv {
 
 /// Phase 1: load all sources and apply precedence, including remote promotion
 /// (spec §5.1). Does not contact any provider.
-pub fn merge(
-    config: &Config,
-    profile_name: &str,
-    opts: &LoadOptions,
-) -> CliResult<MergedEnv> {
+pub fn merge(config: &Config, profile_name: &str, opts: &LoadOptions) -> CliResult<MergedEnv> {
     let precedence = config.precedence()?;
     let profile = config.profile(profile_name);
     let mut engine = MergeEngine::new();
@@ -101,7 +97,10 @@ pub fn merge(
     }
 
     let winners = engine.resolve(&precedence);
-    Ok(MergedEnv { winners, precedence })
+    Ok(MergedEnv {
+        winners,
+        precedence,
+    })
 }
 
 /// A `.env` value that is a remote URI is promoted to the `remote` precedence
@@ -122,7 +121,10 @@ fn load_dotenv_into(
 ) -> CliResult<()> {
     if !path.exists() {
         if required {
-            return Err(CliError::DotenvParse(format!("{} not found", path.display())));
+            return Err(CliError::DotenvParse(format!(
+                "{} not found",
+                path.display()
+            )));
         }
         return Ok(());
     }
@@ -173,10 +175,7 @@ pub async fn resolve(
             Ok(r) => r,
             Err(e) => {
                 host.shutdown().await;
-                return Err(CliError::SecretResolution(format!(
-                    "{}: {e}",
-                    winner.key
-                )));
+                return Err(CliError::SecretResolution(format!("{}: {e}", winner.key)));
             }
         };
         let redacted = reference.redacted();
@@ -254,8 +253,8 @@ pub async fn resolve_one(
         )));
     }
 
-    let reference = uri::parse(&winner.value)
-        .map_err(|e| CliError::SecretResolution(format!("{key}: {e}")))?;
+    let reference =
+        uri::parse(&winner.value).map_err(|e| CliError::SecretResolution(format!("{key}: {e}")))?;
     let redacted = reference.redacted();
     let mut host = ResolverHost::new(registry, config, profile_name.to_string(), timeout);
     let result = host.resolve(&reference).await;

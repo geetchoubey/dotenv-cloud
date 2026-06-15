@@ -52,7 +52,10 @@ pub struct PluginProcess {
 
 impl PluginProcess {
     /// Launch the plugin executable and perform the handshake.
-    pub async fn launch(provider: &InstalledProvider, handshake_timeout: Duration) -> Result<Self, HostError> {
+    pub async fn launch(
+        provider: &InstalledProvider,
+        handshake_timeout: Duration,
+    ) -> Result<Self, HostError> {
         let exe = provider.executable_path();
         let mut child = tokio::process::Command::new(&exe)
             .stdin(Stdio::piped())
@@ -67,8 +70,14 @@ impl PluginProcess {
                 ))
             })?;
 
-        let stdin = child.stdin.take().ok_or_else(|| HostError::internal("no plugin stdin"))?;
-        let stdout = child.stdout.take().ok_or_else(|| HostError::internal("no plugin stdout"))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| HostError::internal("no plugin stdin"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| HostError::internal("no plugin stdout"))?;
 
         // Drain stderr in the background so the plugin never blocks on a full
         // pipe. Diagnostics are untrusted; we discard them here (spec §13.2).
@@ -99,7 +108,10 @@ impl PluginProcess {
 
         let line = self.read_line(t).await?;
         let resp: HandshakeResult = serde_json::from_str(&line).map_err(|e| {
-            HostError::internal(format!("invalid handshake response from `{}`: {e}", self.info_name))
+            HostError::internal(format!(
+                "invalid handshake response from `{}`: {e}",
+                self.info_name
+            ))
         })?;
         if resp.protocol_version != PROTOCOL_VERSION {
             return Err(HostError::internal(format!(
@@ -153,16 +165,25 @@ impl PluginProcess {
         })?;
 
         match msg {
-            PluginMessage::ResolveResult { value, metadata, .. } => Ok(ResolvedSecret {
+            PluginMessage::ResolveResult {
+                value, metadata, ..
+            } => Ok(ResolvedSecret {
                 value: secrecy::SecretString::new(value),
                 metadata: SecretMetadata {
-                    provider: metadata.provider.unwrap_or_else(|| reference.scheme.clone()),
+                    provider: metadata
+                        .provider
+                        .unwrap_or_else(|| reference.scheme.clone()),
                     source_uri_redacted: reference.redacted(),
                     version: metadata.version,
                     cache_hit: false,
                 },
             }),
-            PluginMessage::Error { class, message, reference: r, .. } => Err(HostError {
+            PluginMessage::Error {
+                class,
+                message,
+                reference: r,
+                ..
+            } => Err(HostError {
                 class: ProviderErrorClass::parse(&class).unwrap_or(ProviderErrorClass::Internal),
                 message,
                 reference_redacted: r.or_else(|| Some(reference.redacted())),
@@ -193,7 +214,10 @@ impl PluginProcess {
                 message: format!("provider `{}` timed out after {:?}", self.info_name, t),
                 reference_redacted: None,
             }),
-            Ok(Err(e)) => Err(HostError::internal(format!("read from `{}`: {e}", self.info_name))),
+            Ok(Err(e)) => Err(HostError::internal(format!(
+                "read from `{}`: {e}",
+                self.info_name
+            ))),
             Ok(Ok(0)) => Err(HostError::internal(format!(
                 "provider `{}` closed its output unexpectedly",
                 self.info_name

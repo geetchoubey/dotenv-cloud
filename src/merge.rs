@@ -113,7 +113,10 @@ impl Precedence {
     pub fn safety_warnings(&self) -> Vec<String> {
         let mut w = Vec::new();
         if self.rank(Source::Remote) < self.rank(Source::Cli) {
-            w.push("`remote` is configured above `cli`; resolved secrets will override CLI flags".into());
+            w.push(
+                "`remote` is configured above `cli`; resolved secrets will override CLI flags"
+                    .into(),
+            );
         }
         if self.rank(Source::System) > self.rank(Source::Env) {
             w.push("`system` is configured below `.env`; file values will override the process environment".into());
@@ -171,11 +174,14 @@ impl MergeEngine {
         origin: Source,
         value: impl Into<String>,
     ) {
-        self.candidates.entry(key.into()).or_default().push(Candidate {
-            source,
-            origin,
-            value: value.into(),
-        });
+        self.candidates
+            .entry(key.into())
+            .or_default()
+            .push(Candidate {
+                source,
+                origin,
+                value: value.into(),
+            });
     }
 
     /// Resolve winners for all keys under the given precedence.

@@ -91,7 +91,8 @@ impl ProvidersConfig {
             "vault" => &self.vault,
             _ => &None,
         };
-        key.clone().unwrap_or(toml::Value::Table(Default::default()))
+        key.clone()
+            .unwrap_or(toml::Value::Table(Default::default()))
     }
 }
 
@@ -152,7 +153,10 @@ pub struct SensitiveConfig {
 impl Config {
     /// Resolve config discovery (spec §9.1) and load it. Returns the default
     /// config when none is found.
-    pub fn discover_and_load(explicit: Option<&Path>, env_var: Option<String>) -> CliResult<Config> {
+    pub fn discover_and_load(
+        explicit: Option<&Path>,
+        env_var: Option<String>,
+    ) -> CliResult<Config> {
         if let Some(path) = explicit {
             return Self::load_file(path);
         }
@@ -204,11 +208,8 @@ impl Config {
         match &self.precedence {
             None => Ok(Precedence::default()),
             Some(p) => {
-                let sources: Vec<Source> = p
-                    .order
-                    .iter()
-                    .filter_map(|s| Source::parse(s))
-                    .collect();
+                let sources: Vec<Source> =
+                    p.order.iter().filter_map(|s| Source::parse(s)).collect();
                 Precedence::from_order(&sources).map_err(CliError::Config)
             }
         }

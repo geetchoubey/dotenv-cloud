@@ -88,17 +88,15 @@ pub fn user_provider_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let local = std::env::var_os("LOCALAPPDATA")?;
-        return Some(
-            PathBuf::from(local)
-                .join("dotenv-cloud")
-                .join("providers"),
-        );
+        return Some(PathBuf::from(local).join("dotenv-cloud").join("providers"));
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let base = std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share")))?;
+            .or_else(|| {
+                std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share"))
+            })?;
         return Some(base.join("dotenv-cloud").join("providers"));
     }
     #[allow(unreachable_code)]

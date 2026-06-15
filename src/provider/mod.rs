@@ -33,8 +33,12 @@ impl ProviderRegistry {
         for (name, path) in &config.providers.paths {
             let dir = std::path::Path::new(path);
             let manifest_path = dir.join("manifest.toml");
-            let text = std::fs::read_to_string(&manifest_path)
-                .map_err(|e| format!("provider `{name}` manifest at {}: {e}", manifest_path.display()))?;
+            let text = std::fs::read_to_string(&manifest_path).map_err(|e| {
+                format!(
+                    "provider `{name}` manifest at {}: {e}",
+                    manifest_path.display()
+                )
+            })?;
             let manifest = manifest::Manifest::parse(&text)?;
             all.push(InstalledProvider {
                 manifest,
@@ -91,7 +95,12 @@ pub struct ResolverHost<'a> {
 }
 
 impl<'a> ResolverHost<'a> {
-    pub fn new(registry: &'a ProviderRegistry, config: &'a Config, profile: String, timeout: Duration) -> Self {
+    pub fn new(
+        registry: &'a ProviderRegistry,
+        config: &'a Config,
+        profile: String,
+        timeout: Duration,
+    ) -> Self {
         ResolverHost {
             registry,
             config,
@@ -104,7 +113,10 @@ impl<'a> ResolverHost<'a> {
 
     /// Resolve one reference, using the cache and launching the plugin if
     /// needed. Returns a redaction-aware [`ResolvedSecret`].
-    pub async fn resolve(&mut self, reference: &SecretReference) -> Result<ResolvedSecret, HostError> {
+    pub async fn resolve(
+        &mut self,
+        reference: &SecretReference,
+    ) -> Result<ResolvedSecret, HostError> {
         let provider = self
             .registry
             .provider_for_scheme(&reference.scheme)
@@ -119,7 +131,8 @@ impl<'a> ResolverHost<'a> {
             })?
             .clone();
 
-        let cache_key = SecretCache::key(&provider.manifest.name, &reference.original, &self.profile);
+        let cache_key =
+            SecretCache::key(&provider.manifest.name, &reference.original, &self.profile);
         if let Some(cached) = self.cache.get(&cache_key) {
             return Ok(ResolvedSecret {
                 value: cached,
@@ -139,7 +152,8 @@ impl<'a> ResolverHost<'a> {
         }
         let proc = self.processes.get_mut(&provider.manifest.name).unwrap();
 
-        let provider_config = toml_to_json(self.config.providers.config_for_scheme(&reference.scheme));
+        let provider_config =
+            toml_to_json(self.config.providers.config_for_scheme(&reference.scheme));
         let resolved = proc
             .resolve(reference, &self.profile, provider_config, self.timeout)
             .await?;
@@ -180,7 +194,9 @@ pub fn toml_to_json(value: toml::Value) -> serde_json::Value {
             .unwrap_or(serde_json::Value::Null),
         toml::Value::Boolean(b) => serde_json::Value::Bool(b),
         toml::Value::Datetime(dt) => serde_json::Value::String(dt.to_string()),
-        toml::Value::Array(a) => serde_json::Value::Array(a.into_iter().map(toml_to_json).collect()),
+        toml::Value::Array(a) => {
+            serde_json::Value::Array(a.into_iter().map(toml_to_json).collect())
+        }
         toml::Value::Table(t) => {
             serde_json::Value::Object(t.into_iter().map(|(k, v)| (k, toml_to_json(v))).collect())
         }

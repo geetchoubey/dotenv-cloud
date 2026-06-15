@@ -28,7 +28,10 @@ pub struct Ctx {
 
 impl Ctx {
     pub fn from_global(g: &GlobalArgs) -> CliResult<Ctx> {
-        let config = Config::discover_and_load(g.config.as_deref(), std::env::var("DOTENV_CLOUD_CONFIG").ok())?;
+        let config = Config::discover_and_load(
+            g.config.as_deref(),
+            std::env::var("DOTENV_CLOUD_CONFIG").ok(),
+        )?;
         let profile = config.resolve_profile(g.profile.as_deref());
         let reporter = Reporter {
             verbose: g.verbose,
@@ -68,7 +71,15 @@ impl Ctx {
             }
         }
         let registry = ProviderRegistry::discover(&self.config).map_err(CliError::Config)?;
-        pipeline::resolve(merged, &self.config, &self.profile, &registry, self.timeout, &self.reporter).await
+        pipeline::resolve(
+            merged,
+            &self.config,
+            &self.profile,
+            &registry,
+            self.timeout,
+            &self.reporter,
+        )
+        .await
     }
 }
 
@@ -130,7 +141,10 @@ fn print_redacted_summary(ctx: &Ctx, resolved: &ResolvedEnv) {
 // ---------------------------------------------------------------------------
 
 pub async fn export(ctx: &Ctx, args: ExportArgs) -> CliResult<i32> {
-    let shell_name = args.shell.or(args.format).unwrap_or_else(|| "bash".to_string());
+    let shell_name = args
+        .shell
+        .or(args.format)
+        .unwrap_or_else(|| "bash".to_string());
     let shell = Shell::parse(&shell_name)
         .ok_or_else(|| CliError::Usage(format!("unsupported shell `{shell_name}`")))?;
 
@@ -171,9 +185,7 @@ pub async fn build(ctx: &Ctx, args: BuildArgs) -> CliResult<i32> {
         }
         "json" => {
             let map: BTreeMap<&String, &String> = filtered.iter().collect();
-            serde_json::to_string_pretty(&map)
-                .map_err(|e| CliError::Runtime(e.to_string()))?
-                + "\n"
+            serde_json::to_string_pretty(&map).map_err(|e| CliError::Runtime(e.to_string()))? + "\n"
         }
         other => return Err(CliError::Usage(format!("invalid --mode `{other}`"))),
     };
@@ -191,8 +203,11 @@ pub async fn build(ctx: &Ctx, args: BuildArgs) -> CliResult<i32> {
                 )));
             }
             write_secure(path, &content, args.chmod.as_deref())?;
-            ctx.reporter
-                .info(&format!("wrote {} keys to {}", filtered.len(), path.display()));
+            ctx.reporter.info(&format!(
+                "wrote {} keys to {}",
+                filtered.len(),
+                path.display()
+            ));
             Ok(0)
         }
     }
@@ -205,7 +220,9 @@ fn write_secure(path: &PathBuf, content: &str, chmod: Option<&str>) -> CliResult
     {
         use std::os::unix::fs::PermissionsExt;
         let mode = chmod
-            .and_then(|m| u32::from_str_radix(m.trim_start_matches("0o").trim_start_matches('0'), 8).ok())
+            .and_then(|m| {
+                u32::from_str_radix(m.trim_start_matches("0o").trim_start_matches('0'), 8).ok()
+            })
             .unwrap_or(0o600);
         let mode = if mode == 0 { 0o600 } else { mode };
         let perms = std::fs::Permissions::from_mode(mode);
@@ -228,10 +245,16 @@ pub async fn resolve_key(ctx: &Ctx, args: ResolveArgs) -> CliResult<i32> {
     let registry = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
     let key = &args.key;
 
-    let (value, info) =
-        pipeline::resolve_one(&merged, key, &ctx.config, &ctx.profile, &registry, ctx.timeout)
-            .await?
-            .ok_or_else(|| CliError::SecretResolution(format!("key `{key}` not found")))?;
+    let (value, info) = pipeline::resolve_one(
+        &merged,
+        key,
+        &ctx.config,
+        &ctx.profile,
+        &registry,
+        ctx.timeout,
+    )
+    .await?
+    .ok_or_else(|| CliError::SecretResolution(format!("key `{key}` not found")))?;
 
     let provider = info
         .reference_redacted
@@ -257,7 +280,10 @@ pub async fn resolve_key(ctx: &Ctx, args: ResolveArgs) -> CliResult<i32> {
         }
         if args.source {
             obj["shadowed"] = serde_json::Value::Array(
-                info.shadowed.iter().map(|s| serde_json::Value::String(s.to_string())).collect(),
+                info.shadowed
+                    .iter()
+                    .map(|s| serde_json::Value::String(s.to_string()))
+                    .collect(),
             );
         }
         println!("{}", serde_json::to_string_pretty(&obj).unwrap());
@@ -321,7 +347,10 @@ pub async fn validate(ctx: &Ctx, args: ValidateArgs) -> CliResult<i32> {
                 }
             }
         }
-        checks.push(format!("{} remote reference(s) validated", required_schemes.len()));
+        checks.push(format!(
+            "{} remote reference(s) validated",
+            required_schemes.len()
+        ));
     }
 
     // Provider availability.
@@ -362,7 +391,7 @@ pub async fn validate(ctx: &Ctx, args: ValidateArgs) -> CliResult<i32> {
         }
     }
 
-    let ok = problems.iter().all(|p| p.starts_with("warning:")) ;
+    let ok = problems.iter().all(|p| p.starts_with("warning:"));
     let hard_fail = !problems.iter().all(|p| p.starts_with("warning:"));
 
     if args.json {
@@ -396,7 +425,11 @@ pub async fn validate(ctx: &Ctx, args: ValidateArgs) -> CliResult<i32> {
 
 pub async fn doctor(ctx: &Ctx) -> CliResult<i32> {
     println!("dotenv-cloud {}", env!("CARGO_PKG_VERSION"));
-    println!("platform: {} {}", std::env::consts::OS, std::env::consts::ARCH);
+    println!(
+        "platform: {} {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
     match &ctx.config.source_path {
         Some(p) => println!("config: {}", p.display()),
         None => println!("config: (none; using defaults)"),
@@ -404,14 +437,24 @@ pub async fn doctor(ctx: &Ctx) -> CliResult<i32> {
     println!("active profile: {}", ctx.profile);
 
     let profile = ctx.config.profile(&ctx.profile);
-    for (label, file) in [("env_file", profile.env_file()), ("env_local_file", profile.env_local_file())] {
+    for (label, file) in [
+        ("env_file", profile.env_file()),
+        ("env_local_file", profile.env_local_file()),
+    ] {
         let exists = std::path::Path::new(file).exists();
-        println!("  {label}: {file} ({})", if exists { "found" } else { "missing" });
+        println!(
+            "  {label}: {file} ({})",
+            if exists { "found" } else { "missing" }
+        );
     }
 
     println!("provider directories:");
     for dir in crate::provider::manifest::discovery_dirs() {
-        println!("  {} ({})", dir.display(), if dir.exists() { "present" } else { "absent" });
+        println!(
+            "  {} ({})",
+            dir.display(),
+            if dir.exists() { "present" } else { "absent" }
+        );
     }
 
     match ProviderRegistry::discover(&ctx.config) {
@@ -430,10 +473,18 @@ pub async fn doctor(ctx: &Ctx) -> CliResult<i32> {
     }
 
     // Credential hints (no secrets printed).
-    let aws_region = std::env::var("AWS_REGION").or_else(|_| std::env::var("AWS_DEFAULT_REGION")).ok();
+    let aws_region = std::env::var("AWS_REGION")
+        .or_else(|_| std::env::var("AWS_DEFAULT_REGION"))
+        .ok();
     println!("AWS region detectable: {}", aws_region.is_some());
-    println!("VAULT_ADDR set: {}", std::env::var_os("VAULT_ADDR").is_some());
-    println!("VAULT_TOKEN set: {}", std::env::var_os("VAULT_TOKEN").is_some());
+    println!(
+        "VAULT_ADDR set: {}",
+        std::env::var_os("VAULT_ADDR").is_some()
+    );
+    println!(
+        "VAULT_TOKEN set: {}",
+        std::env::var_os("VAULT_TOKEN").is_some()
+    );
     println!("provider timeout: {:?}", ctx.timeout);
     Ok(0)
 }
@@ -455,7 +506,11 @@ pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
         }
     }
 
-    println!("detected {} required scheme(s): {}", schemes.len(), schemes.join(", "));
+    println!(
+        "detected {} required scheme(s): {}",
+        schemes.len(),
+        schemes.join(", ")
+    );
 
     let registry = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
     let mut missing = Vec::new();
@@ -463,13 +518,18 @@ pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
         if registry.has_scheme(s) {
             println!("  {s}: provider installed");
         } else {
-            println!("  {s}: MISSING (package `{}`)", provider::suggest_package(s));
+            println!(
+                "  {s}: MISSING (package `{}`)",
+                provider::suggest_package(s)
+            );
             missing.push(s.clone());
         }
     }
 
     // Write a lockfile from currently-installed providers.
-    let lockfile = args.lockfile.unwrap_or_else(|| PathBuf::from("dotenv-cloud.lock"));
+    let lockfile = args
+        .lockfile
+        .unwrap_or_else(|| PathBuf::from("dotenv-cloud.lock"));
     write_lockfile(&lockfile, &registry)?;
     println!("wrote {}", lockfile.display());
 
@@ -479,7 +539,14 @@ pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
              install provider plugins into `.dotenv-cloud/providers` manually.",
             missing.len()
         ));
-        let _ = (args.yes, args.project, args.user, args.registry, args.upgrade, args.offline);
+        let _ = (
+            args.yes,
+            args.project,
+            args.user,
+            args.registry,
+            args.upgrade,
+            args.offline,
+        );
         return Ok(crate::error::ExitCode::Runtime.code());
     }
     Ok(0)
@@ -491,7 +558,12 @@ fn write_lockfile(path: &PathBuf, registry: &ProviderRegistry) -> CliResult<()> 
         out.push_str("\n[[provider]]\n");
         out.push_str(&format!("name = \"{}\"\n", p.manifest.name));
         out.push_str(&format!("version = \"{}\"\n", p.manifest.version));
-        let schemes: Vec<String> = p.manifest.schemes.iter().map(|s| format!("\"{s}\"")).collect();
+        let schemes: Vec<String> = p
+            .manifest
+            .schemes
+            .iter()
+            .map(|s| format!("\"{s}\""))
+            .collect();
         out.push_str(&format!("schemes = [{}]\n", schemes.join(", ")));
         if let Some(sha) = p.manifest.integrity.as_ref().and_then(|i| i.sha256.clone()) {
             out.push_str(&format!("sha256 = \"{sha}\"\n"));
@@ -565,12 +637,14 @@ fn providers_list(ctx: &Ctx, a: ProvidersCommonArgs) -> CliResult<i32> {
 
 fn providers_info(ctx: &Ctx, a: ProvidersTargetArgs) -> CliResult<i32> {
     let registry = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
-    let found = registry
-        .installed()
-        .iter()
-        .find(|p| p.manifest.name == a.name || p.manifest.name == format!("dotenv-cloud-provider-{}", a.name));
+    let found = registry.installed().iter().find(|p| {
+        p.manifest.name == a.name || p.manifest.name == format!("dotenv-cloud-provider-{}", a.name)
+    });
     match found {
-        None => Err(CliError::Runtime(format!("provider `{}` is not installed", a.name))),
+        None => Err(CliError::Runtime(format!(
+            "provider `{}` is not installed",
+            a.name
+        ))),
         Some(p) => {
             if a.json {
                 let obj = serde_json::json!({
@@ -602,18 +676,25 @@ fn providers_remove(ctx: &Ctx, a: ProvidersTargetArgs) -> CliResult<i32> {
     let found = registry
         .installed()
         .iter()
-        .find(|p| p.manifest.name == a.name || p.manifest.name == format!("dotenv-cloud-provider-{}", a.name))
+        .find(|p| {
+            p.manifest.name == a.name
+                || p.manifest.name == format!("dotenv-cloud-provider-{}", a.name)
+        })
         .cloned();
     match found {
-        None => Err(CliError::Runtime(format!("provider `{}` is not installed", a.name))),
+        None => Err(CliError::Runtime(format!(
+            "provider `{}` is not installed",
+            a.name
+        ))),
         Some(p) => {
             if !a.yes {
                 ctx.reporter
                     .warn(&format!("re-run with --yes to remove {}", p.dir.display()));
                 return Ok(crate::error::ExitCode::Runtime.code());
             }
-            std::fs::remove_dir_all(&p.dir)
-                .map_err(|e| CliError::Runtime(format!("cannot remove {}: {e}", p.dir.display())))?;
+            std::fs::remove_dir_all(&p.dir).map_err(|e| {
+                CliError::Runtime(format!("cannot remove {}: {e}", p.dir.display()))
+            })?;
             println!("removed {}", p.manifest.name);
             Ok(0)
         }

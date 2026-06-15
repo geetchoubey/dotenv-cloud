@@ -41,9 +41,9 @@ pub fn run(argv: &[String], env: &BTreeMap<String, String>, opts: &ExecOptions) 
         cmd.env(k, v);
     }
 
-    let status = cmd.status().map_err(|e| {
-        CliError::Runtime(format!("failed to execute `{program}`: {e}"))
-    })?;
+    let status = cmd
+        .status()
+        .map_err(|e| CliError::Runtime(format!("failed to execute `{program}`: {e}")))?;
 
     if let Some(code) = status.code() {
         return Ok(code);

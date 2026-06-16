@@ -42,26 +42,59 @@
     block.appendChild(btn);
   });
 
-  // ---- Active section highlight in the table of contents ----
+  // ---- Active section highlight in the table of contents (scrollspy) ----
+  // Only same-page (#anchor) links participate; cross-page links (e.g. the
+  // Reference link) are left alone.
   var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a"));
-  var map = {};
-  links.forEach(function (a) {
-    var id = a.getAttribute("href").slice(1);
-    var el = document.getElementById(id);
-    if (el) map[id] = a;
-  });
-  if ("IntersectionObserver" in window && links.length) {
-    var obs = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          links.forEach(function (a) { a.classList.remove("active"); });
-          var a = map[entry.target.id];
-          if (a) a.classList.add("active");
-        }
-      });
-    }, { rootMargin: "-45% 0px -50% 0px" });
-    Object.keys(map).forEach(function (id) {
-      obs.observe(document.getElementById(id));
+  var pairs = links
+    .filter(function (a) {
+      return (a.getAttribute("href") || "").charAt(0) === "#";
+    })
+    .map(function (a) {
+      return { a: a, el: document.getElementById(a.getAttribute("href").slice(1)) };
+    })
+    .filter(function (p) {
+      return p.el;
     });
+
+  var current = null;
+  function setActive(a) {
+    if (current === a) return;
+    if (current) {
+      current.classList.remove("active");
+      if (!current.className) current.removeAttribute("class"); // avoid leaving class=""
+    }
+    if (a) a.classList.add("active");
+    current = a;
+  }
+
+  if (pairs.length) {
+    var header = document.querySelector("header.bar");
+
+    function spy() {
+      var offset = (header ? header.offsetHeight : 0) + 16;
+      var y = window.scrollY + offset;
+      var active = pairs[0].a;
+      for (var i = 0; i < pairs.length; i++) {
+        var top = pairs[i].el.getBoundingClientRect().top + window.scrollY;
+        if (top <= y) active = pairs[i].a;
+      }
+      // At the very bottom, the last section is active even if its top is above.
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+        active = pairs[pairs.length - 1].a;
+      }
+      setActive(active);
+    }
+
+    // Clicking a link reflects immediately, before the smooth scroll settles.
+    pairs.forEach(function (p) {
+      p.a.addEventListener("click", function () {
+        setActive(p.a);
+      });
+    });
+
+    window.addEventListener("scroll", spy, { passive: true });
+    window.addEventListener("resize", spy);
+    spy();
   }
 })();

@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn cache_roundtrip() {
         let c = SecretCache::new();
-        let k = SecretCache::key("aws-sm", "aws-sm://prod/db/password", "dev");
+        let k = SecretCache::key("aws-secrets", "aws-secrets://prod/db/password", "dev");
         assert!(c.get(&k).is_none());
         c.insert(k.clone(), SecretString::new("s3cr3t".into()));
         assert_eq!(c.get(&k).unwrap().expose_secret(), "s3cr3t");
@@ -84,8 +84,8 @@ mod tests {
         let r = ResolvedSecret {
             value: SecretString::new("topsecret".into()),
             metadata: SecretMetadata {
-                provider: "aws-sm".into(),
-                source_uri_redacted: "aws-sm://p/[redacted]".into(),
+                provider: "aws-secrets".into(),
+                source_uri_redacted: "aws-secrets://p/[redacted]".into(),
                 version: None,
                 cache_hit: false,
             },

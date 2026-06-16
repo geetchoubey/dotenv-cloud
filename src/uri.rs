@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use crate::redact;
 
 /// Provider URI schemes recognized by the core (spec §6.1).
-pub const SUPPORTED_SCHEMES: &[&str] = &["aws-sm", "aws-ssm", "vault"];
+pub const SUPPORTED_SCHEMES: &[&str] = &["aws-secrets", "aws-ssm", "vault"];
 
 /// A parsed secret reference (mirrors `SecretReference` in spec §7.5).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn detects_supported_schemes() {
-        assert_eq!(detect_scheme("aws-sm://x/y"), Some("aws-sm"));
+        assert_eq!(detect_scheme("aws-secrets://x/y"), Some("aws-secrets"));
         assert_eq!(detect_scheme("aws-ssm:///x"), Some("aws-ssm"));
         assert_eq!(detect_scheme("vault://kv/app"), Some("vault"));
         assert_eq!(detect_scheme("REGION=us-east-1"), None);
@@ -115,8 +115,8 @@ mod tests {
 
     #[test]
     fn parses_aws_sm() {
-        let r = parse("aws-sm://prod/db/password").unwrap();
-        assert_eq!(r.scheme, "aws-sm");
+        let r = parse("aws-secrets://prod/db/password").unwrap();
+        assert_eq!(r.scheme, "aws-secrets");
         assert_eq!(r.authority.as_deref(), Some("prod"));
         assert_eq!(r.path, "/db/password");
         assert!(r.fragment.is_none());
@@ -124,10 +124,10 @@ mod tests {
 
     #[test]
     fn parses_fragment_and_query() {
-        let r = parse("aws-sm://prod/app/config#api_key").unwrap();
+        let r = parse("aws-secrets://prod/app/config#api_key").unwrap();
         assert_eq!(r.fragment.as_deref(), Some("api_key"));
 
-        let r = parse("aws-sm://prod/db/password?version_stage=AWSCURRENT").unwrap();
+        let r = parse("aws-secrets://prod/db/password?version_stage=AWSCURRENT").unwrap();
         assert_eq!(
             r.query.get("version_stage").map(String::as_str),
             Some("AWSCURRENT")
@@ -151,14 +151,14 @@ mod tests {
 
     #[test]
     fn rejects_invalid_references() {
-        assert!(parse("aws-sm://").is_err());
+        assert!(parse("aws-secrets://").is_err());
         assert!(parse("aws-ssm://").is_err());
         assert!(parse("vault://#key").is_err());
     }
 
     #[test]
     fn redacts_reference() {
-        let r = parse("aws-sm://prod/db/password").unwrap();
-        assert_eq!(r.redacted(), "aws-sm://prod/db/[redacted]");
+        let r = parse("aws-secrets://prod/db/password").unwrap();
+        assert_eq!(r.redacted(), "aws-secrets://prod/db/[redacted]");
     }
 }

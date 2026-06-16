@@ -6,7 +6,7 @@
       "repo": "geetchoubey/dotenv-cloud-provider-aws",
       "package": "dotenv-cloud-provider-aws",
       "bin_prefix": "dotenv-cloud-provider-aws",
-      "schemes": ["aws-sm", "aws-ssm"],
+      "schemes": ["aws-secrets", "aws-ssm"],
       "description": "AWS Secrets Manager and SSM Parameter Store provider for dotenv-cloud"
     }
   ]

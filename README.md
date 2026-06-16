@@ -26,7 +26,7 @@ in separate repositories and are installed into a provider directory.
 Implemented in this build:
 
 - dotenv parsing (quotes, escapes, `export`, comments) — spec §16
-- secret-reference URI detection/parsing (`aws-sm://`, `aws-ssm://`, `vault://`) — spec §6
+- secret-reference URI detection/parsing (`aws-secrets://`, `aws-ssm://`, `vault://`) — spec §6
 - deterministic, configurable source precedence with remote promotion — spec §5
 - redaction policy for keys, remote values, and URI references — spec §13.3
 - provider plugin host (newline-delimited JSON over stdin/stdout) — spec §7.4

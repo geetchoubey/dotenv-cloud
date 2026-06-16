@@ -87,7 +87,7 @@ PORT = "3000"</pre></div>
     <tr><th>Identifier</th><th>Source</th></tr>
     <tr><td><code>cli</code></td><td>Values from <code>--set KEY=VALUE</code></td></tr>
     <tr><td><code>system</code></td><td>Variables already in the process environment</td></tr>
-    <tr><td><code>remote</code></td><td>Values resolved from secret references (<code>aws-sm://</code>, …)</td></tr>
+    <tr><td><code>remote</code></td><td>Values resolved from secret references (<code>aws-secrets://</code>, …)</td></tr>
     <tr><td><code>env.local</code></td><td>The profile's <code>env_local_file</code></td></tr>
     <tr><td><code>env</code></td><td>The profile's <code>env_file</code></td></tr>
     <tr><td><code>defaults</code></td><td>The <code>[defaults]</code> table</td></tr>
@@ -98,7 +98,7 @@ PORT = "3000"</pre></div>
   <code>provider_config</code> during resolution. The <strong>core does not validate</strong>
   the keys inside these tables — they're defined by each provider. The keys below
   are what the bundled AWS provider understands (examples, not a fixed schema).</p>
-  <div class="code"><pre><span class="d"># AWS provider — schemes aws-sm, aws-ssm</span>
+  <div class="code"><pre><span class="d"># AWS provider — schemes aws-secrets, aws-ssm</span>
 [providers.aws]
 region = "us-east-1"
 profile = "default"      <span class="d"># named profile from ~/.aws (omit for the default chain)</span>
@@ -230,7 +230,9 @@ patterns = ["*_TOKEN", "*_SECRET"]</pre></div>
   </table>
 
   <h3 id="cmd-export">export</h3>
-  <p>Print shell-compatible assignments for the resolved environment.</p>
+  <p>Print shell-compatible assignments for the <strong>project</strong> environment
+  (<code>.env</code>, <code>.env.local</code>, remote, <code>[defaults]</code>,
+  <code>--set</code>) — not your shell's ambient variables.</p>
   <table>
     <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
     <tr><td><code>--shell</code> / <code>--format</code></td><td>shell</td><td><code>bash</code> (default), <code>zsh</code>, <code>fish</code>, <code>powershell</code> (aliases <code>pwsh</code>, <code>ps1</code>).</td></tr>
@@ -240,7 +242,8 @@ patterns = ["*_TOKEN", "*_SECRET"]</pre></div>
   </table>
 
   <h3 id="cmd-build">build</h3>
-  <p>Materialize the resolved environment to a file or stdout.</p>
+  <p>Materialize the <strong>project</strong> environment (same sources as
+  <code>export</code>; not ambient shell variables) to a file or stdout.</p>
   <table>
     <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
     <tr><td><code>--mode</code></td><td>dotenv|json</td><td>Output format (default <code>dotenv</code>).</td></tr>

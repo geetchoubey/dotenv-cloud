@@ -218,11 +218,31 @@ pub async fn run(ctx: &Ctx, args: RunArgs) -> CliResult<i32> {
         }
     }
 
+    // Build the overlay applied on top of the child's environment. The child
+    // already inherits the process (`system`) environment (unless --clear-env),
+    // so we only set a project value when it should win over an inherited
+    // system variable: always if its source outranks `system` in precedence (or
+    // the env is being cleared), otherwise only when no system value exists to
+    // defer to.
+    let sys_rank = resolved.precedence.rank(Source::System);
+    let mut child_env = BTreeMap::new();
+    for (key, value) in &resolved.map {
+        let source = resolved
+            .info
+            .get(key)
+            .map(|i| i.winning_source)
+            .unwrap_or(Source::Env);
+        let outranks_system = resolved.precedence.rank(source) < sys_rank;
+        if args.clear_env || outranks_system || std::env::var_os(key).is_none() {
+            child_env.insert(key.clone(), value.clone());
+        }
+    }
+
     let opts = ExecOptions {
         clear_env: args.clear_env,
         preserve: args.preserve,
     };
-    exec::run(&args.command, &resolved.map, &opts)
+    exec::run(&args.command, &child_env, &opts)
 }
 
 fn print_redacted_summary(ctx: &Ctx, resolved: &ResolvedEnv) {
@@ -679,25 +699,34 @@ pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
     Ok(0)
 }
 
+/// Regenerate the lockfile from currently-installed providers, reusing the same
+/// record schema as the install path so entries are consistent (`source` and
+/// `sha256` included). The integrity comes from each provider's installed
+/// manifest, which the install path records.
 fn write_lockfile(path: &PathBuf, registry: &ProviderRegistry) -> CliResult<()> {
-    let mut out = String::from("version = 1\n");
-    for p in registry.installed() {
-        out.push_str("\n[[provider]]\n");
-        out.push_str(&format!("name = \"{}\"\n", p.manifest.name));
-        out.push_str(&format!("version = \"{}\"\n", p.manifest.version));
-        let schemes: Vec<String> = p
-            .manifest
-            .schemes
-            .iter()
-            .map(|s| format!("\"{s}\""))
-            .collect();
-        out.push_str(&format!("schemes = [{}]\n", schemes.join(", ")));
-        if let Some(sha) = p.manifest.integrity.as_ref().and_then(|i| i.sha256.clone()) {
-            out.push_str(&format!("sha256 = \"{sha}\"\n"));
-        }
+    let _ = std::fs::remove_file(path);
+    if registry.installed().is_empty() {
+        return std::fs::write(path, "version = 1\n")
+            .map_err(|e| CliError::Runtime(format!("cannot write {}: {e}", path.display())));
     }
-    std::fs::write(path, out)
-        .map_err(|e| CliError::Runtime(format!("cannot write {}: {e}", path.display())))
+    for p in registry.installed() {
+        let sha256 = p
+            .manifest
+            .integrity
+            .as_ref()
+            .and_then(|i| i.sha256.clone())
+            .unwrap_or_default();
+        let record = registry::InstalledRecord {
+            name: p.manifest.name.clone(),
+            package: p.manifest.name.clone(),
+            version: p.manifest.version.clone(),
+            schemes: p.manifest.schemes.clone(),
+            source: "installed".to_string(),
+            sha256,
+        };
+        registry::upsert_lockfile(path, &record).map_err(CliError::Runtime)?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

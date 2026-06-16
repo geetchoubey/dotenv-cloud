@@ -87,7 +87,7 @@ impl ProvidersConfig {
     /// `provider_config` in the resolve protocol.
     pub fn config_for_scheme(&self, scheme: &str) -> toml::Value {
         let key = match scheme {
-            "aws-sm" | "aws-ssm" => &self.aws,
+            "aws-secrets" | "aws-ssm" => &self.aws,
             "vault" => &self.vault,
             _ => &None,
         };

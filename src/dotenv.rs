@@ -301,8 +301,8 @@ mod tests {
 
     #[test]
     fn remote_uri_value_preserved() {
-        let e = p("DB_PASSWORD=aws-sm://prod/db/password");
-        assert_eq!(e[0].value, "aws-sm://prod/db/password");
+        let e = p("DB_PASSWORD=aws-secrets://prod/db/password");
+        assert_eq!(e[0].value, "aws-secrets://prod/db/password");
     }
 
     #[test]

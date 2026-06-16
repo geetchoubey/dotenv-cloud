@@ -28,7 +28,7 @@ name = "dotenv-cloud-provider-aws"
 version = "1.0.0"
 protocol_version = "1"
 executable = "dotenv-cloud-provider-aws"   # relative to this dir, or absolute
-schemes = ["aws-sm", "aws-ssm"]
+schemes = ["aws-secrets", "aws-ssm"]
 description = "AWS Secrets Manager and SSM provider"
 
 [integrity]
@@ -53,7 +53,7 @@ Plugin → core:
 
 ```json
 {"type":"handshake_result","protocol_version":"1",
- "plugin":{"name":"dotenv-cloud-provider-aws","version":"1.0.0","schemes":["aws-sm","aws-ssm"]}}
+ "plugin":{"name":"dotenv-cloud-provider-aws","version":"1.0.0","schemes":["aws-secrets","aws-ssm"]}}
 ```
 
 The core rejects a plugin whose `protocol_version` differs from `1`.
@@ -64,7 +64,7 @@ Core → plugin:
 
 ```json
 {"type":"resolve","request_id":"req-1","profile":"dev",
- "reference":{"original":"aws-sm://prod/db/password","scheme":"aws-sm",
+ "reference":{"original":"aws-secrets://prod/db/password","scheme":"aws-secrets",
    "authority":"prod","path":"/db/password","fragment":null,"query":{}},
  "provider_config":{"region":"us-east-1","timeout_ms":2000}}
 ```
@@ -73,14 +73,14 @@ Plugin → core (success):
 
 ```json
 {"type":"resolve_result","request_id":"req-1","value":"secret-value",
- "metadata":{"provider":"aws-sm","version":"AWSCURRENT"}}
+ "metadata":{"provider":"aws-secrets","version":"AWSCURRENT"}}
 ```
 
 Plugin → core (error):
 
 ```json
 {"type":"error","request_id":"req-1","class":"PermissionDenied",
- "message":"access denied","reference":"aws-sm://prod/db/[redacted]"}
+ "message":"access denied","reference":"aws-secrets://prod/db/[redacted]"}
 ```
 
 ### Error classes
@@ -106,7 +106,7 @@ for line in sys.stdin:
     if msg["type"] == "handshake":
         print(json.dumps({
             "type": "handshake_result", "protocol_version": "1",
-            "plugin": {"name": "my-provider", "version": "0.1.0", "schemes": ["aws-sm"]},
+            "plugin": {"name": "my-provider", "version": "0.1.0", "schemes": ["aws-secrets"]},
         }), flush=True)
     elif msg["type"] == "resolve":
         ref = msg["reference"]

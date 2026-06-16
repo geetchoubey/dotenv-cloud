@@ -59,18 +59,34 @@
 
 <section id="what">
   <h2>What is dotenv-cloud?</h2>
-  <p><strong>dotenv-cloud</strong> loads your <code>.env</code> files like any dotenv
-  loader — but values can be <em>references</em> to secrets stored in a remote
-  vault. At run time it resolves those references through external
-  <strong>provider plugins</strong>, merges everything with clear precedence, and
-  injects the result into your process. Secrets stay in your secret store; only
-  references live in your repo.</p>
-  <div class="code"><pre><span class="d"># .env</span>
-APP_NAME=billing
-DB_PASSWORD=<span class="c">aws-sm://prod/billing/db#password</span>   <span class="d"># from AWS Secrets Manager</span>
-API_TOKEN=<span class="c">aws-ssm://prod/billing/api_token</span>      <span class="d"># from SSM Parameter Store</span></pre></div>
-  <div class="code"><pre><span class="d"># run any command with the resolved environment</span>
+  <p><strong>Keep your dotenv workflow exactly as it is — you don't change a
+  single line of code.</strong> Your app still reads plain environment variables
+  (<code>process.env</code>, <code>os.environ</code>, <code>System.getenv</code>,
+  …) and you still keep a <code>.env</code> file. The one difference: a value can
+  now be a <em>reference</em> to a secret in a remote vault instead of a
+  hard-coded plaintext secret.</p>
+  <p>dotenv-cloud resolves those references at run time, merges them with your
+  local values by clear precedence, and injects the result into your process —
+  the same way dotenv always has. There's no SDK to import and nothing to
+  rewrite: secrets stay in your vault, only references live in your repo.</p>
+
+  <h3>Your application code stays the same</h3>
+  <div class="code"><pre><span class="d">// however you already read config — unchanged, no SDK</span>
+const dbPassword = process.env.<span class="c">DB_PASSWORD</span>;</pre></div>
+
+  <h3>Only the <code>.env</code> value changes — plaintext becomes a reference</h3>
+  <div class="code"><pre><span class="d"># before — a secret committed in plaintext</span>
+DB_PASSWORD=super-secret-value
+
+<span class="d"># after — a reference; the real secret never leaves your vault</span>
+DB_PASSWORD=<span class="c">aws-secrets://prod/billing/db#password</span>
+API_TOKEN=<span class="c">aws-ssm://prod/billing/api_token</span></pre></div>
+
+  <h3>Launch through dotenv-cloud and everything resolves</h3>
+  <div class="code"><pre><span class="d"># your usual command, just prefixed</span>
 dotenv-cloud run -- node server.js</pre></div>
+  <p class="muted">Plain values in <code>.env</code> are passed straight through,
+  so you can adopt it gradually — turn one secret into a reference at a time.</p>
 </section>
 
 <section id="install">
@@ -121,7 +137,7 @@ dotenv-cloud run -- ./start.sh</pre></div>
   <h2>How it works</h2>
   <h3>Reference syntax</h3>
   <p>Any value may be a URI reference. The scheme selects the provider:</p>
-  <div class="code"><pre>aws-sm://<span class="d">path/to/secret</span>#<span class="d">field</span>            <span class="d"># AWS Secrets Manager (optional JSON field)</span>
+  <div class="code"><pre>aws-secrets://<span class="d">path/to/secret</span>#<span class="d">field</span>            <span class="d"># AWS Secrets Manager (optional JSON field)</span>
 aws-ssm://<span class="d">path/to/parameter</span>           <span class="d"># AWS SSM Parameter Store</span></pre></div>
   <h3>Precedence</h3>
   <p>Sources merge in a defined order (highest wins). The default is:</p>
@@ -151,7 +167,7 @@ dotenv-cloud providers list                  <span class="d"># what's installed<
 dotenv-cloud providers update                <span class="d"># update all</span></pre></div>
   <table>
     <tr><th>Provider</th><th>Schemes</th><th>Backend</th></tr>
-    <tr><td><code>aws</code></td><td><code>aws-sm</code>, <code>aws-ssm</code></td><td>AWS Secrets Manager &amp; SSM Parameter Store</td></tr>
+    <tr><td><code>aws</code></td><td><code>aws-secrets</code>, <code>aws-ssm</code></td><td>AWS Secrets Manager &amp; SSM Parameter Store</td></tr>
   </table>
   <p class="muted">AWS credentials are read from your environment exactly like the
   AWS CLI/SDK (env vars, shared config, IAM roles). dotenv-cloud never stores them.</p>
@@ -188,7 +204,7 @@ dotenv-cloud providers update                <span class="d"># update all</span>
   <details>
     <summary>Where do the secrets actually come from?</summary>
     <p>From whichever provider backs the scheme. Today that's AWS Secrets Manager
-    (<code>aws-sm</code>) and SSM Parameter Store (<code>aws-ssm</code>). Authentication
+    (<code>aws-secrets</code>) and SSM Parameter Store (<code>aws-ssm</code>). Authentication
     uses your existing AWS environment — the same credentials the AWS CLI would use.</p>
   </details>
 

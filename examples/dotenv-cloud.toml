@@ -17,53 +17,52 @@
 # contents are free-form and passed through to the provider plugin.
 #
 # Relevant environment variables:
-#   DOTENV_CLOUD_CONFIG  — absolute/relative path to a config file (skips discovery)
-#   DOTENV_CLOUD_PROFILE — active profile name (overrides default_profile; beaten by --profile)
+#   DOTENV_CLOUD_CONFIG      — absolute/relative path to a config file (skips discovery)
+#   DOTENV_CLOUD_ENVIRONMENT — active environment name (overrides default_environment; beaten by --environment)
 #   DOTENV_CLOUD_TARGET_OVERRIDE — override the build target triple (testing only)
 # =============================================================================
 
 
 # -----------------------------------------------------------------------------
-# Active profile
+# Active environment
 # -----------------------------------------------------------------------------
-# Profile selected when neither `--profile` nor DOTENV_CLOUD_PROFILE is given.
-# Resolution order: --profile flag > DOTENV_CLOUD_PROFILE > default_profile > "dev".
+# Environment selected when neither `--environment` nor DOTENV_CLOUD_ENVIRONMENT
+# is given. Resolution order:
+#   --environment flag > DOTENV_CLOUD_ENVIRONMENT > default_environment > "dev".
 # Optional; omit to fall back to "dev".
-default_profile = "dev"
+default_environment = "dev"
 
 
 # -----------------------------------------------------------------------------
-# Profiles  [profile.<name>]
+# Environments  [environment.<name>]
 # -----------------------------------------------------------------------------
-# Each profile names the dotenv files to load for that environment. Both keys
-# are optional; when a profile (or the whole [profile.*] section) is omitted,
-# the defaults below are used.
+# Each environment names the dotenv files to load and, optionally, its default
+# values. All keys are optional; when an environment (or the whole
+# [environment.*] section) is omitted, the file defaults below are used.
 #
-# Only these two keys are allowed per profile (unknown keys are rejected).
+# Only env_file, env_local_file, and a [environment.<name>.defaults] table are
+# allowed per environment (unknown keys are rejected).
 
-[profile.dev]
+[environment.dev]
 env_file = ".env"              # primary env file        (default: ".env")
 env_local_file = ".env.local"  # gitignored local overrides (default: ".env.local")
 
-[profile.staging]
+# Per-environment default values. Lowest precedence by default (see
+# [precedence]), so they only apply when no higher-precedence source provides
+# the key. They ALSO serve as the fallback value when a remote reference for the
+# same key fails to resolve — only when no default exists does [resolution]
+# `missing` apply. Free-form string key/value pairs; values must be strings.
+[environment.dev.defaults]
+LOG_LEVEL = "info"
+PORT = "3000"
+
+[environment.staging]
 env_file = ".env.staging"
 env_local_file = ".env.staging.local"
 
-[profile.prod]
+[environment.prod]
 env_file = ".env.production"
 env_local_file = ".env.production.local"
-
-
-# -----------------------------------------------------------------------------
-# Built-in defaults  [defaults]
-# -----------------------------------------------------------------------------
-# Static fallback values, lowest precedence by default (see [precedence]). Used
-# when a key is not provided by any higher-precedence source. Free-form string
-# key/value pairs; values must be strings.
-
-[defaults]
-LOG_LEVEL = "info"
-PORT = "3000"
 
 
 # -----------------------------------------------------------------------------
@@ -77,9 +76,9 @@ PORT = "3000"
 #   cli        — values passed via `--set KEY=VALUE` on the command line
 #   system     — variables already present in the process environment
 #   remote     — values resolved from secret references (aws-secrets://, vault://, …)
-#   env.local  — the profile's env_local_file
-#   env        — the profile's env_file
-#   defaults   — the [defaults] table above
+#   env.local  — the environment's env_local_file
+#   env        — the environment's env_file
+#   defaults   — the [environment.<name>.defaults] table above
 #
 # The list must not contain duplicates. Omit the whole section to use the
 # built-in default order shown here.

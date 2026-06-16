@@ -79,6 +79,38 @@ fn missing_provider_fails_closed() {
 }
 
 #[test]
+fn remote_failure_falls_back_to_environment_default() {
+    let dir = temp_project("DB_PASSWORD=aws-secrets://prod/db/password\n");
+    // No provider is installed, so resolution fails — but an environment default
+    // exists for the same key, so it should be used instead of failing closed.
+    std::fs::write(
+        dir.path().join("dotenv-cloud.toml"),
+        "default_environment = \"dev\"\n\n[environment.dev.defaults]\nDB_PASSWORD = \"local-default\"\n",
+    )
+    .unwrap();
+    let out = bin()
+        .current_dir(dir.path())
+        .args(["--no-env-local", "run", "--", "printenv", "DB_PASSWORD"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "should succeed via fallback; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "local-default"
+    );
+    // The fallback is announced on stderr, and the reference stays redacted.
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("using environment default"),
+        "expected fallback warning: {stderr}"
+    );
+}
+
+#[test]
 fn cli_set_overrides_env_file() {
     let dir = temp_project("PORT=3000\n");
     let out = bin()

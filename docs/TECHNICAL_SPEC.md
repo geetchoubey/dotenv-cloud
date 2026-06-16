@@ -260,7 +260,7 @@ If no fragment is present:
 Resolved secrets are cached in memory for the duration of a single command execution. Cache key:
 
 ```text
-provider_id + normalized_uri + profile_name
+provider_id + normalized_uri + environment_name
 ```
 
 The cache prevents duplicate network calls when multiple environment keys reference the same remote secret. The cache is destroyed when the process exits.
@@ -421,13 +421,36 @@ Handshake response:
 }
 ```
 
-Resolve request:
+Describe request/response (optional; used by `init` to drive interactive
+provider configuration):
+
+```json
+{ "type": "describe" }
+```
+
+```json
+{
+  "type": "describe_result",
+  "config_schema": [
+    { "key": "region", "label": "AWS region", "kind": "string", "required": false, "secret": false },
+    { "key": "ssm.with_decryption", "label": "Decrypt SSM SecureString parameters", "kind": "bool", "default": "true", "required": false, "secret": false }
+  ]
+}
+```
+
+Each field has a `key` (dotted keys nest into sub-tables), a `label` prompt, a
+`kind` (`string` | `bool` | `integer`), an optional string `default`, and
+`required` / `secret` flags. Plugins with no settings return an empty
+`config_schema`.
+
+Resolve request (`environment` was named `profile` before the environment
+rename):
 
 ```json
 {
   "type": "resolve",
   "request_id": "01J...",
-  "profile": "dev",
+  "environment": "dev",
   "reference": {
     "original": "aws-secrets://prod/db/password",
     "scheme": "aws-secrets",
@@ -767,30 +790,30 @@ If both TOML and YAML exist in the same directory and no `--config` is provided,
 ### 9.2 Example Config
 
 ```toml
-default_profile = "dev"
+default_environment = "dev"
 
-[profile.dev]
+[environment.dev]
 env_file = ".env"
 env_local_file = ".env.local"
 
-[profile.staging]
+[environment.dev.defaults]
+LOG_LEVEL = "info"
+PORT = "3000"
+
+[environment.staging]
 env_file = ".env.staging"
 env_local_file = ".env.staging.local"
 
-[profile.prod]
+[environment.prod]
 env_file = ".env.production"
 env_local_file = ".env.production.local"
-
-[defaults]
-LOG_LEVEL = "info"
-PORT = "3000"
 
 [precedence]
 order = ["cli", "system", "remote", "env.local", "env", "defaults"]
 
 [providers.aws]
 region = "us-east-1"
-profile = "dev"
+profile = "dev"          # AWS named credentials profile (unrelated to environments)
 timeout_ms = 2000
 
 [providers.aws.ssm]
@@ -806,20 +829,26 @@ timeout_ms = 2000
 default_version = "v2"
 ```
 
-### 9.3 Profiles
+Default values live under each environment as `[environment.<name>.defaults]`.
+They are the lowest precedence source AND the fallback used when a remote
+reference for the same key fails to resolve (see §12).
 
-Profiles select environment-specific configuration:
+### 9.3 Environments
+
+Environments select environment-specific configuration (this concept was
+previously called "profiles"; not to be confused with the AWS named credentials
+`profile` under `[providers.aws]`):
 
 ```sh
-dotenv-cloud --profile dev run -- npm start
-dotenv-cloud --profile prod validate
+dotenv-cloud --environment dev run -- npm start
+dotenv-cloud --environment prod validate
 ```
 
-Profile resolution order:
+Environment resolution order:
 
-1. `--profile <name>`
-2. `DOTENV_CLOUD_PROFILE`
-3. `default_profile`
+1. `--environment <name>`
+2. `DOTENV_CLOUD_ENVIRONMENT`
+3. `default_environment`
 4. `dev`
 
 ## 10. CLI Design
@@ -829,9 +858,9 @@ Profile resolution order:
 | Flag | Description |
 | --- | --- |
 | `--config <path>` | Use an explicit config file. |
-| `--profile <name>` | Select a named profile. |
-| `--env-file <path>` | Override profile `.env` path. |
-| `--env-local-file <path>` | Override profile `.env.local` path. |
+| `--environment <name>` | Select a named environment. |
+| `--env-file <path>` | Override environment `.env` path. |
+| `--env-local-file <path>` | Override environment `.env.local` path. |
 | `--no-env-file` | Do not load `.env`. |
 | `--no-env-local` | Do not load `.env.local`. |
 | `--set KEY=VALUE` | Add or override an environment value at CLI precedence. May be repeated. |
@@ -866,13 +895,17 @@ dotenv-cloud [global flags] init [init flags]
 
 Purpose:
 
-Initialize provider dependencies for the current project or user. `init` scans configured dotenv files and `dotenv-cloud.toml`, detects required URI schemes, installs missing provider plugins, verifies integrity, and writes `dotenv-cloud.lock`.
+Initialize provider dependencies for the current project or user. Behavior depends on whether a config file already exists:
+
+- **No `dotenv-cloud.toml`, interactive terminal:** runs an interactive setup. The user picks providers from the registry; each is installed; the core then sends a `describe` request to each installed plugin (§7.4) and prompts for the provider's configurable settings (e.g. AWS `region`, `ssm.with_decryption`). It writes a fresh `dotenv-cloud.toml` (`default_environment`, `[environment.<name>]`, `[providers.*]`) and `dotenv-cloud.lock`.
+- **Config present:** scans configured dotenv files and `dotenv-cloud.toml`, detects required URI schemes, and installs any missing provider plugins automatically (no `--yes` confirmation), verifies integrity, and writes `dotenv-cloud.lock`.
+- **Non-interactive (no TTY) or `--yes` with no config:** skips the interactive flow and uses the config/dotenv-driven path above (e.g. to regenerate the lockfile from installed providers).
 
 Flags:
 
 | Flag | Description |
 | --- | --- |
-| `--yes` | Accept provider installation prompts. |
+| `--yes` | Skip the interactive setup; use the non-interactive config/dotenv-driven path. |
 | `--project` | Install providers into `.dotenv-cloud/providers`. Default when a project config exists. |
 | `--user` | Install providers into the user provider directory. |
 | `--registry <url>` | Use a custom provider registry. |
@@ -918,7 +951,7 @@ Separator semantics:
 Example:
 
 ```sh
-dotenv-cloud --profile dev run -- npm start
+dotenv-cloud --environment dev run -- npm start
 ```
 
 ### 10.5 `export`
@@ -1039,13 +1072,13 @@ Flags:
 | --- | --- |
 | `--providers` | Contact remote providers to validate access. |
 | `--no-providers` | Parse and validate locally only. |
-| `--all-profiles` | Validate every configured profile. |
+| `--all-environments` | Validate every configured environment. |
 | `--json` | Emit machine-readable diagnostics. |
 
 Validation checks:
 
 - Config file syntax.
-- Profile references.
+- Environment references.
 - Precedence order.
 - Dotenv syntax.
 - Unknown URI schemes.
@@ -1071,7 +1104,7 @@ Checks:
 
 - Binary version and platform.
 - Config discovery result.
-- Active profile.
+- Active environment.
 - Dotenv files found.
 - Provider plugin directory paths.
 - Installed provider manifests.
@@ -1170,7 +1203,7 @@ For `dotenv-cloud run -- npm start`:
 
 1. Parse global flags and the `run` command.
 2. Locate and parse `dotenv-cloud.toml`.
-3. Select the active profile.
+3. Select the active environment.
 4. Load default config values.
 5. Parse `.env`.
 6. Parse `.env.local`.
@@ -1256,7 +1289,7 @@ Default logging:
 
 Verbose logging:
 
-- May include config path, profile, provider names, source precedence, cache hit status, and redacted URI references.
+- May include config path, environment, provider names, source precedence, cache hit status, and redacted URI references.
 - Must not include secrets.
 
 ### 13.5 Telemetry
@@ -1435,6 +1468,14 @@ missing = "error" # error | warn | ignore
 
 Ignoring missing secrets is not recommended and must warn unless `--quiet` is set.
 
+**Default-value fallback.** When a remote reference fails to resolve — for any
+reason (not found, authentication, network, timeout) — the core first checks the
+active environment's `[environment.<name>.defaults]` for the same key. If a
+default exists, it is used (recorded at the `defaults` source) and a warning is
+emitted noting the fallback. Only when no default exists does the `missing`
+policy above apply. This lets a project keep working against a local default
+value when a backend is unavailable, while still surfacing the failure.
+
 ### 18.2 Partial Resolution Failures
 
 If any required winning value fails to resolve, `run` must fail before spawning the child process.
@@ -1533,13 +1574,13 @@ Environment variables are not uniformly capable of carrying arbitrary bytes acro
 Indicative TOML schema:
 
 ```toml
-default_profile = "dev"
+default_environment = "dev"
 
-[profile.<name>]
+[environment.<name>]
 env_file = ".env"
 env_local_file = ".env.local"
 
-[defaults]
+[environment.<name>.defaults]
 KEY = "VALUE"
 
 [precedence]
@@ -1547,7 +1588,7 @@ order = ["cli", "system", "remote", "env.local", "env", "defaults"]
 
 [providers.aws]
 region = "us-east-1"
-profile = "dev"
+profile = "dev"          # AWS named credentials profile
 timeout_ms = 2000
 
 [providers.aws.ssm]
@@ -1624,7 +1665,7 @@ Secret values must be redacted unless a command explicitly opts into showing the
 - Precedence merge behavior.
 - Redaction functions.
 - Shell export quoting.
-- Config loading and profile selection.
+- Config loading and environment selection.
 - Error classification.
 
 ### 21.2 Integration Tests
@@ -1725,13 +1766,13 @@ eval "$(dotenv-cloud export --shell bash)"
 ### 23.4 Validate CI Configuration
 
 ```sh
-dotenv-cloud --profile prod validate --providers --strict
+dotenv-cloud --environment prod validate --providers --strict
 ```
 
 ### 23.5 Materialize Build Environment
 
 ```sh
-dotenv-cloud --profile staging build --output .env.resolved --force
+dotenv-cloud --environment staging build --output .env.resolved --force
 ```
 
 ## 24. V1 Acceptance Criteria

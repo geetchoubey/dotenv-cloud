@@ -58,12 +58,47 @@ Plugin → core:
 
 The core rejects a plugin whose `protocol_version` differs from `1`.
 
-## Resolve
+## Describe (optional)
+
+`dotenv-cloud init` asks a freshly installed plugin what it can be configured
+with, then prompts the user and writes the answers into `[providers.<name>]`.
+Plugins that have no configurable settings may return an empty `config_schema`
+(or omit it).
 
 Core → plugin:
 
 ```json
-{"type":"resolve","request_id":"req-1","profile":"dev",
+{"type":"describe"}
+```
+
+Plugin → core:
+
+```json
+{"type":"describe_result","config_schema":[
+  {"key":"region","label":"AWS region","kind":"string","required":false,"secret":false},
+  {"key":"ssm.with_decryption","label":"Decrypt SSM SecureString parameters",
+   "kind":"bool","default":"true","required":false,"secret":false}
+]}
+```
+
+Each field:
+
+- `key` — config key; a dotted key (e.g. `ssm.with_decryption`) nests into a
+  sub-table (`[providers.aws.ssm] with_decryption = ...`).
+- `label` — human-readable prompt text.
+- `kind` — `string` (default), `bool`, or `integer`; controls how the core
+  prompts and serializes the value.
+- `default` — optional default value, as a string.
+- `required` — when true, the core insists on a value.
+- `secret` — when true, the value is sensitive and not echoed/defaulted visibly.
+
+## Resolve
+
+Core → plugin (`environment` is the active environment name; it was called
+`profile` before protocol v1's environment rename):
+
+```json
+{"type":"resolve","request_id":"req-1","environment":"dev",
  "reference":{"original":"aws-secrets://prod/db/password","scheme":"aws-secrets",
    "authority":"prod","path":"/db/password","fragment":null,"query":{}},
  "provider_config":{"region":"us-east-1","timeout_ms":2000}}
@@ -107,6 +142,13 @@ for line in sys.stdin:
         print(json.dumps({
             "type": "handshake_result", "protocol_version": "1",
             "plugin": {"name": "my-provider", "version": "0.1.0", "schemes": ["aws-secrets"]},
+        }), flush=True)
+    elif msg["type"] == "describe":
+        print(json.dumps({
+            "type": "describe_result",
+            "config_schema": [
+                {"key": "region", "label": "AWS region", "kind": "string"},
+            ],
         }), flush=True)
     elif msg["type"] == "resolve":
         ref = msg["reference"]

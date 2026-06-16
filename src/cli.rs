@@ -28,9 +28,9 @@ pub struct GlobalArgs {
     #[arg(long, global = true, value_name = "path")]
     pub config: Option<PathBuf>,
 
-    /// Select a named profile.
+    /// Select a named environment.
     #[arg(long, global = true, value_name = "name")]
-    pub profile: Option<String>,
+    pub environment: Option<String>,
 
     /// Override profile `.env` path.
     #[arg(long, global = true, value_name = "path")]
@@ -259,7 +259,7 @@ pub struct ValidateArgs {
     #[arg(long)]
     pub no_providers: bool,
     #[arg(long)]
-    pub all_profiles: bool,
+    pub all_environments: bool,
     #[arg(long)]
     pub json: bool,
 }

@@ -56,9 +56,9 @@ pub struct ResolvedEnv {
 
 /// Phase 1: load all sources and apply precedence, including remote promotion
 /// (spec §5.1). Does not contact any provider.
-pub fn merge(config: &Config, profile_name: &str, opts: &LoadOptions) -> CliResult<MergedEnv> {
+pub fn merge(config: &Config, environment_name: &str, opts: &LoadOptions) -> CliResult<MergedEnv> {
     let precedence = config.precedence()?;
-    let profile = config.profile(profile_name);
+    let environment = config.environment(environment_name);
     let mut engine = MergeEngine::new();
 
     // Lowest precedence first is not required (sort is stable on rank), but we
@@ -82,7 +82,7 @@ pub fn merge(config: &Config, profile_name: &str, opts: &LoadOptions) -> CliResu
         let path = opts
             .env_local_file
             .clone()
-            .unwrap_or_else(|| PathBuf::from(profile.env_local_file()));
+            .unwrap_or_else(|| PathBuf::from(environment.env_local_file()));
         load_dotenv_into(&mut engine, &path, Source::EnvLocal, false)?;
     }
 
@@ -91,12 +91,12 @@ pub fn merge(config: &Config, profile_name: &str, opts: &LoadOptions) -> CliResu
         let path = opts
             .env_file
             .clone()
-            .unwrap_or_else(|| PathBuf::from(profile.env_file()));
+            .unwrap_or_else(|| PathBuf::from(environment.env_file()));
         load_dotenv_into(&mut engine, &path, Source::Env, false)?;
     }
 
-    // Config defaults (lowest).
-    for (k, v) in &config.defaults {
+    // Per-environment defaults (lowest precedence).
+    for (k, v) in &environment.defaults {
         let effective = effective_source(v, Source::Defaults);
         engine.add_with_origin(k.clone(), effective, Source::Defaults, v.clone());
     }
@@ -147,7 +147,7 @@ fn load_dotenv_into(
 pub async fn resolve(
     merged: MergedEnv,
     config: &Config,
-    profile_name: &str,
+    environment_name: &str,
     registry: &ProviderRegistry,
     timeout: Duration,
     reporter: &Reporter,
@@ -156,8 +156,9 @@ pub async fn resolve(
     let mut info = BTreeMap::new();
     let precedence = merged.precedence.clone();
     let missing_policy = config.resolution.missing.clone();
+    let defaults = config.defaults_for(environment_name);
 
-    let mut host = ResolverHost::new(registry, config, profile_name.to_string(), timeout);
+    let mut host = ResolverHost::new(registry, config, environment_name.to_string(), timeout);
 
     for winner in &merged.winners {
         let from_remote = winner.winning_source == Source::Remote;
@@ -202,6 +203,30 @@ pub async fn resolve(
             }
             Err(e) => {
                 use crate::error::ProviderErrorClass::*;
+
+                // Fallback (spec §12): on any resolution failure, if the active
+                // environment defines a default for this key, use it instead of
+                // failing or dropping the key. Only when no default exists does
+                // the `resolution.missing` policy apply.
+                if let Some(default) = defaults.get(&winner.key) {
+                    reporter.warn(&format!(
+                        "{}: remote resolution failed ({}); using environment default",
+                        winner.key, e.class
+                    ));
+                    map.insert(winner.key.clone(), default.clone());
+                    info.insert(
+                        winner.key.clone(),
+                        KeyInfo {
+                            winning_source: Source::Defaults,
+                            origin: Source::Defaults,
+                            shadowed: winner.shadowed.clone(),
+                            from_remote: false,
+                            reference_redacted: Some(redacted),
+                        },
+                    );
+                    continue;
+                }
+
                 let is_missing = matches!(e.class, NotFound);
                 if is_missing && missing_policy != "error" {
                     if missing_policy == "warn" {
@@ -241,7 +266,7 @@ pub async fn resolve_one(
     merged: &MergedEnv,
     key: &str,
     config: &Config,
-    profile_name: &str,
+    environment_name: &str,
     registry: &ProviderRegistry,
     timeout: Duration,
 ) -> CliResult<Option<(String, KeyInfo)>> {
@@ -265,7 +290,7 @@ pub async fn resolve_one(
     let reference =
         uri::parse(&winner.value).map_err(|e| CliError::SecretResolution(format!("{key}: {e}")))?;
     let redacted = reference.redacted();
-    let mut host = ResolverHost::new(registry, config, profile_name.to_string(), timeout);
+    let mut host = ResolverHost::new(registry, config, environment_name.to_string(), timeout);
     let result = host.resolve(&reference).await;
     host.shutdown().await;
 
@@ -281,6 +306,20 @@ pub async fn resolve_one(
             },
         ))),
         Err(e) => {
+            // Fallback to the environment default for this key, if any
+            // (spec §12), mirroring `resolve`.
+            if let Some(default) = config.defaults_for(environment_name).get(key) {
+                return Ok(Some((
+                    default.clone(),
+                    KeyInfo {
+                        winning_source: Source::Defaults,
+                        origin: Source::Defaults,
+                        shadowed: winner.shadowed.clone(),
+                        from_remote: false,
+                        reference_redacted: Some(redacted),
+                    },
+                )));
+            }
             let detail = format_resolution_failure(
                 key,
                 &reference.scheme,

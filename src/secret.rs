@@ -41,7 +41,7 @@ impl ResolvedSecret {
     }
 }
 
-/// In-memory cache keyed by `provider_id + normalized_uri + profile_name`
+/// In-memory cache keyed by `provider_id + normalized_uri + environment_name`
 /// (spec §6.5). Destroyed when the process exits; never persisted.
 #[derive(Default)]
 pub struct SecretCache {
@@ -53,8 +53,8 @@ impl SecretCache {
         Self::default()
     }
 
-    pub fn key(provider_id: &str, normalized_uri: &str, profile: &str) -> String {
-        format!("{provider_id}\u{1f}{normalized_uri}\u{1f}{profile}")
+    pub fn key(provider_id: &str, normalized_uri: &str, environment: &str) -> String {
+        format!("{provider_id}\u{1f}{normalized_uri}\u{1f}{environment}")
     }
 
     pub fn get(&self, key: &str) -> Option<SecretString> {

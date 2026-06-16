@@ -18,8 +18,8 @@ use crate::uri::SecretReference;
 
 use super::manifest::InstalledProvider;
 use super::protocol::{
-    HandshakeRequest, HandshakeResult, PluginMessage, ReferencePayload, ResolveRequest,
-    PROTOCOL_VERSION,
+    ConfigField, DescribeRequest, DescribeResult, HandshakeRequest, HandshakeResult, PluginMessage,
+    ReferencePayload, ResolveRequest, PROTOCOL_VERSION,
 };
 
 /// An error from talking to a plugin. Carries a provider error class for exit
@@ -122,12 +122,26 @@ impl PluginProcess {
         Ok(())
     }
 
+    /// Ask the plugin for its configurable settings (spec §7.4). Returns an
+    /// empty list if the plugin advertises none. Used by `init`.
+    pub async fn describe(&mut self, t: Duration) -> Result<Vec<ConfigField>, HostError> {
+        self.write_json(&DescribeRequest::new()).await?;
+        let line = self.read_line(t).await?;
+        let resp: DescribeResult = serde_json::from_str(&line).map_err(|e| {
+            HostError::internal(format!(
+                "invalid describe response from `{}`: {e}",
+                self.info_name
+            ))
+        })?;
+        Ok(resp.config_schema)
+    }
+
     /// Resolve a single reference. `provider_config` is a JSON object passed
     /// through to the plugin.
     pub async fn resolve(
         &mut self,
         reference: &SecretReference,
-        profile: &str,
+        environment: &str,
         provider_config: serde_json::Value,
         t: Duration,
     ) -> Result<ResolvedSecret, HostError> {
@@ -137,7 +151,7 @@ impl PluginProcess {
         let req = ResolveRequest {
             kind: "resolve",
             request_id: request_id.clone(),
-            profile: profile.to_string(),
+            environment: environment.to_string(),
             reference: ReferencePayload {
                 original: reference.original.clone(),
                 scheme: reference.scheme.clone(),

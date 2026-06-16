@@ -11,6 +11,7 @@ mod exec;
 mod export;
 mod merge;
 mod pipeline;
+mod prompt;
 mod provider;
 mod redact;
 mod report;

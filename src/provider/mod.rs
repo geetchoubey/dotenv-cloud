@@ -88,7 +88,7 @@ impl ProviderRegistry {
 pub struct ResolverHost<'a> {
     registry: &'a ProviderRegistry,
     config: &'a Config,
-    profile: String,
+    environment: String,
     timeout: Duration,
     cache: SecretCache,
     /// One live process per provider name, launched on first use.
@@ -99,13 +99,13 @@ impl<'a> ResolverHost<'a> {
     pub fn new(
         registry: &'a ProviderRegistry,
         config: &'a Config,
-        profile: String,
+        environment: String,
         timeout: Duration,
     ) -> Self {
         ResolverHost {
             registry,
             config,
-            profile,
+            environment,
             timeout,
             cache: SecretCache::new(),
             processes: HashMap::new(),
@@ -133,7 +133,7 @@ impl<'a> ResolverHost<'a> {
             .clone();
 
         let cache_key =
-            SecretCache::key(&provider.manifest.name, &reference.original, &self.profile);
+            SecretCache::key(&provider.manifest.name, &reference.original, &self.environment);
         if let Some(cached) = self.cache.get(&cache_key) {
             return Ok(ResolvedSecret {
                 value: cached,
@@ -156,7 +156,7 @@ impl<'a> ResolverHost<'a> {
         let provider_config =
             toml_to_json(self.config.providers.config_for_scheme(&reference.scheme));
         let resolved = proc
-            .resolve(reference, &self.profile, provider_config, self.timeout)
+            .resolve(reference, &self.environment, provider_config, self.timeout)
             .await?;
 
         self.cache.insert(cache_key, resolved.value.clone());

@@ -24,13 +24,10 @@ use crate::redact::RedactionPolicy;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
-    pub default_profile: Option<String>,
+    pub default_environment: Option<String>,
 
     #[serde(default)]
-    pub profile: BTreeMap<String, ProfileConfig>,
-
-    #[serde(default)]
-    pub defaults: BTreeMap<String, String>,
+    pub environment: BTreeMap<String, EnvironmentConfig>,
 
     #[serde(default)]
     pub precedence: Option<PrecedenceConfig>,
@@ -57,11 +54,16 @@ pub struct Config {
 
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ProfileConfig {
+pub struct EnvironmentConfig {
     #[serde(default)]
     pub env_file: Option<String>,
     #[serde(default)]
     pub env_local_file: Option<String>,
+    /// Per-environment default values. Participate in the merge at the
+    /// `defaults` precedence level, and serve as the fallback value when a
+    /// remote reference for the same key fails to resolve (spec §5, §12).
+    #[serde(default)]
+    pub defaults: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -218,25 +220,34 @@ impl Config {
         }
     }
 
-    /// Resolve the active profile name (spec §9.3).
-    pub fn resolve_profile(&self, cli_profile: Option<&str>) -> String {
-        if let Some(p) = cli_profile {
+    /// Resolve the active environment name (spec §9.3).
+    pub fn resolve_environment(&self, cli_environment: Option<&str>) -> String {
+        if let Some(p) = cli_environment {
             return p.to_string();
         }
-        if let Ok(p) = std::env::var("DOTENV_CLOUD_PROFILE") {
+        if let Ok(p) = std::env::var("DOTENV_CLOUD_ENVIRONMENT") {
             if !p.is_empty() {
                 return p;
             }
         }
-        if let Some(p) = &self.default_profile {
+        if let Some(p) = &self.default_environment {
             return p.clone();
         }
         "dev".to_string()
     }
 
-    /// Profile config for `name`, or an empty profile using `.env`/`.env.local`.
-    pub fn profile(&self, name: &str) -> ProfileConfig {
-        self.profile.get(name).cloned().unwrap_or_default()
+    /// Environment config for `name`, or an empty environment using
+    /// `.env`/`.env.local`.
+    pub fn environment(&self, name: &str) -> EnvironmentConfig {
+        self.environment.get(name).cloned().unwrap_or_default()
+    }
+
+    /// The default values for environment `name` (empty when none configured).
+    pub fn defaults_for(&self, name: &str) -> BTreeMap<String, String> {
+        self.environment
+            .get(name)
+            .map(|e| e.defaults.clone())
+            .unwrap_or_default()
     }
 
     pub fn redaction_policy(&self) -> RedactionPolicy {
@@ -247,7 +258,7 @@ impl Config {
     }
 }
 
-impl ProfileConfig {
+impl EnvironmentConfig {
     pub fn env_file(&self) -> &str {
         self.env_file.as_deref().unwrap_or(".env")
     }
@@ -277,13 +288,13 @@ mod tests {
     #[test]
     fn parses_example_config() {
         let text = r#"
-default_profile = "dev"
+default_environment = "dev"
 
-[profile.dev]
+[environment.dev]
 env_file = ".env"
 env_local_file = ".env.local"
 
-[defaults]
+[environment.dev.defaults]
 LOG_LEVEL = "info"
 PORT = "3000"
 
@@ -297,18 +308,21 @@ region = "us-east-1"
 address = "https://vault.example.com"
 "#;
         let cfg: Config = toml::from_str(text).unwrap();
-        assert_eq!(cfg.default_profile.as_deref(), Some("dev"));
-        assert_eq!(cfg.defaults.get("PORT").map(String::as_str), Some("3000"));
+        assert_eq!(cfg.default_environment.as_deref(), Some("dev"));
+        assert_eq!(
+            cfg.defaults_for("dev").get("PORT").map(String::as_str),
+            Some("3000")
+        );
         let p = cfg.precedence().unwrap();
         assert_eq!(p.order()[0], Source::Cli);
     }
 
     #[test]
-    fn profile_resolution_falls_back_to_dev() {
+    fn environment_resolution_falls_back_to_dev() {
         let cfg = Config::default();
-        std::env::remove_var("DOTENV_CLOUD_PROFILE");
-        assert_eq!(cfg.resolve_profile(None), "dev");
-        assert_eq!(cfg.resolve_profile(Some("prod")), "prod");
+        std::env::remove_var("DOTENV_CLOUD_ENVIRONMENT");
+        assert_eq!(cfg.resolve_environment(None), "dev");
+        assert_eq!(cfg.resolve_environment(Some("prod")), "prod");
     }
 
     #[test]

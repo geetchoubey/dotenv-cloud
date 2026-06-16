@@ -46,16 +46,18 @@ Put this at the project root (it's discovered by walking up from the cwd). It is
 **shared project configuration with no secrets in it**, so commit it.
 
 ```toml
-default_profile = "dev"
+default_environment = "dev"
 
-[profile.dev]
+[environment.dev]
 env_file = ".env"
 env_local_file = ".env.local"
 
-[profile.prod]
+[environment.prod]
 env_file = ".env.production"
 
-[defaults]                       # lowest-precedence fallbacks for ABSENT keys
+# Per-environment fallbacks. Lowest precedence for ABSENT keys, AND the value
+# used when a remote reference for the same key fails to resolve.
+[environment.dev.defaults]
 LOG_LEVEL = "info"
 
 [providers.aws]
@@ -89,10 +91,23 @@ rejected, so typos surface in `validate`.
 ## 3. Bootstrap providers
 
 ```sh
-dotenv-cloud init --yes          # detects schemes in .env, installs needed providers, writes the lockfile
+dotenv-cloud init                # see init behavior below
 dotenv-cloud providers list      # what's installed
 dotenv-cloud validate --providers  # checks config, references, and provider connectivity (no secrets printed)
 ```
+
+`init` behaves differently depending on whether a config already exists:
+
+- **No `dotenv-cloud.toml` (and a TTY):** runs an interactive setup — pick
+  providers, installs them, asks each provider what to configure (e.g. AWS
+  `region`, `ssm.with_decryption`), then writes a fresh `dotenv-cloud.toml` and
+  lockfile.
+- **Config present:** detects the schemes referenced in `.env` and installs any
+  missing providers automatically (no `--yes` confirmation needed), then writes
+  the lockfile. Use `--offline` to skip installs.
+- **Non-interactive / `--yes` with no config:** falls back to the config-driven
+  path (e.g. regenerating the lockfile from installed providers) instead of
+  prompting.
 
 `providers install` downloads a signed plugin, verifies its SHA-256 **and**
 ed25519 signature against the CLI's built-in trusted key, then unpacks it.
@@ -121,8 +136,8 @@ dotenv-cloud doctor                    # diagnose setup, credentials, installed 
 
 `run` inherits the shell environment and overlays the project values;
 `--clear-env`/`--preserve` start from a clean slate. `export`/`build` emit only
-the **project** environment (`.env`, `.env.local`, remote, `[defaults]`,
-`--set`) — never the whole shell.
+the **project** environment (`.env`, `.env.local`, remote,
+`[environment.*.defaults]`, `--set`) — never the whole shell.
 
 ## Provider: AWS (`aws-secrets://`, `aws-ssm://`)
 
@@ -179,11 +194,14 @@ are one of these.
    dump your whole shell env — only the project env — but the project values are
    the actual secrets.)
 
-4. **`[defaults]` is not a fallback for failed lookups.** Precedence picks one
-   winner per key *before* resolution: `remote` outranks `defaults`, so a `.env`
-   reference wins and the default is shadowed. If that remote secret is missing,
-   `resolution.missing = warn`/`ignore` **skips the key** — it does not fall back
-   to the default. Defaults only fill keys that no higher source provides at all.
+4. **`[environment.*.defaults]` are both a precedence floor and a resolution
+   fallback.** Precedence picks one winner per key *before* resolution: `remote`
+   outranks `defaults`, so a `.env` reference wins and the default is shadowed
+   for normal merging. But if that remote secret then **fails to resolve** (not
+   found, auth, network, …), the key falls back to its environment default if one
+   exists — with a warning. Only when there is *no* default does
+   `resolution.missing = error`/`warn`/`ignore` apply. Defaults also fill keys
+   that no higher source provides at all.
 
 5. **Precedence defaults may surprise.** Default order is
    `cli > system > remote > env.local > env > defaults`. So a shell variable

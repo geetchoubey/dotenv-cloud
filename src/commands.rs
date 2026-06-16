@@ -11,6 +11,9 @@ use crate::exec::{self, ExecOptions};
 use crate::export::{self, Shell};
 use crate::merge::Source;
 use crate::pipeline::{self, LoadOptions, MergedEnv, ResolvedEnv};
+use crate::prompt;
+use crate::provider::host::PluginProcess;
+use crate::provider::protocol::{ConfigField, FieldKind};
 use crate::provider::registry::{self, Installer, Scope};
 use crate::provider::{self, ProviderRegistry};
 use crate::redact::{RedactionPolicy, REDACTED};
@@ -121,7 +124,7 @@ fn install_missing_providers(ctx: &Ctx) -> CliResult<()> {
 /// Shared context derived from global flags.
 pub struct Ctx {
     pub config: Config,
-    pub profile: String,
+    pub environment: String,
     pub reporter: Reporter,
     pub timeout: Duration,
     pub load: LoadOptions,
@@ -134,7 +137,7 @@ impl Ctx {
             g.config.as_deref(),
             std::env::var("DOTENV_CLOUD_CONFIG").ok(),
         )?;
-        let profile = config.resolve_profile(g.profile.as_deref());
+        let environment = config.resolve_environment(g.environment.as_deref());
         let reporter = Reporter {
             verbose: g.verbose,
             quiet: g.quiet,
@@ -151,7 +154,7 @@ impl Ctx {
         let redaction = config.redaction_policy();
         Ok(Ctx {
             config,
-            profile,
+            environment,
             reporter,
             timeout: g.timeout()?,
             load,
@@ -160,7 +163,7 @@ impl Ctx {
     }
 
     fn merge(&self) -> CliResult<MergedEnv> {
-        pipeline::merge(&self.config, &self.profile, &self.load)
+        pipeline::merge(&self.config, &self.environment, &self.load)
     }
 
     async fn build_env(&self) -> CliResult<ResolvedEnv> {
@@ -176,7 +179,7 @@ impl Ctx {
         pipeline::resolve(
             merged,
             &self.config,
-            &self.profile,
+            &self.environment,
             &registry,
             self.timeout,
             &self.reporter,
@@ -375,7 +378,7 @@ pub async fn resolve_key(ctx: &Ctx, args: ResolveArgs) -> CliResult<i32> {
         &merged,
         key,
         &ctx.config,
-        &ctx.profile,
+        &ctx.environment,
         &registry,
         ctx.timeout,
     )
@@ -560,12 +563,12 @@ pub async fn doctor(ctx: &Ctx) -> CliResult<i32> {
         Some(p) => println!("config: {}", p.display()),
         None => println!("config: (none; using defaults)"),
     }
-    println!("active profile: {}", ctx.profile);
+    println!("active environment: {}", ctx.environment);
 
-    let profile = ctx.config.profile(&ctx.profile);
+    let environment = ctx.config.environment(&ctx.environment);
     for (label, file) in [
-        ("env_file", profile.env_file()),
-        ("env_local_file", profile.env_local_file()),
+        ("env_file", environment.env_file()),
+        ("env_local_file", environment.env_local_file()),
     ] {
         let exists = std::path::Path::new(file).exists();
         println!(
@@ -620,6 +623,21 @@ pub async fn doctor(ctx: &Ctx) -> CliResult<i32> {
 // ---------------------------------------------------------------------------
 
 pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
+    // With no config file, bootstrap one interactively (spec §10.1) — unless the
+    // caller opted out of prompts with `--yes`, or stdin is not a terminal, in
+    // which case fall back to the config/`.env`-driven path (e.g. regenerating
+    // the lockfile from installed providers).
+    if ctx.config.source_path.is_none() && !args.yes && prompt::is_interactive() {
+        return init_interactive(ctx, args).await;
+    }
+    // A config exists (or we're non-interactive): detect required providers and
+    // install them automatically.
+    init_from_config(ctx, args).await
+}
+
+/// `init` when a config file already exists: scan it for required schemes and
+/// install any missing providers without an explicit `--yes` gate.
+async fn init_from_config(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
     let merged = ctx.merge()?;
     let mut schemes: Vec<String> = Vec::new();
     for w in &merged.winners {
@@ -682,13 +700,8 @@ pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
         return Ok(crate::error::ExitCode::Runtime.code());
     }
 
-    if !args.yes {
-        println!("would install: {}", packages.join(", "));
-        ctx.reporter
-            .warn("re-run `dotenv-cloud init --yes` to install the providers above");
-        return Ok(crate::error::ExitCode::Runtime.code());
-    }
-
+    // A config file is present, so install required providers directly (no
+    // `--yes` confirmation needed).
     let url = registry_url(ctx, args.registry.as_deref());
     let installer = make_installer(ctx, &url, allow_unsigned(ctx, false))?;
     let scope = install_scope(args.project, args.user);
@@ -697,6 +710,213 @@ pub async fn init(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
     }
     println!("init complete; lockfile at {}", lockfile.display());
     Ok(0)
+}
+
+/// `init` when no config file exists: walk the user through picking providers,
+/// install them, ask each provider what to configure, and write a fresh
+/// `dotenv-cloud.toml` plus lockfile (spec §10.1).
+async fn init_interactive(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
+    if !prompt::is_interactive() {
+        return Err(CliError::Usage(
+            "no dotenv-cloud.toml found and stdin is not a terminal; \
+             create a config file or run `init` in an interactive shell"
+                .into(),
+        ));
+    }
+    if args.offline {
+        return Err(CliError::Usage(
+            "--offline cannot bootstrap a new project (providers must be installed)".into(),
+        ));
+    }
+
+    println!("No dotenv-cloud.toml found — let's set one up.");
+
+    let url = registry_url(ctx, args.registry.as_deref());
+    let installer = make_installer(ctx, &url, allow_unsigned(ctx, false))?;
+
+    // Offer the registry's providers for selection.
+    let mut names: Vec<String> = installer.index.providers.keys().cloned().collect();
+    names.sort();
+    let labels: Vec<String> = names
+        .iter()
+        .map(|n| {
+            let p = &installer.index.providers[n];
+            match &p.description {
+                Some(d) => format!("{n} — {d}"),
+                None => n.clone(),
+            }
+        })
+        .collect();
+    let chosen = prompt::select_many("Which providers do you want to use?", &labels)?;
+
+    // The provider short names selected in this run (registry index keys).
+    let chosen_names: Vec<String> = chosen.iter().map(|&i| names[i].clone()).collect();
+
+    let lockfile = args
+        .lockfile
+        .unwrap_or_else(|| PathBuf::from("dotenv-cloud.lock"));
+    let scope = install_scope(args.project, args.user);
+
+    // Install each selected provider that isn't already present. Skipping
+    // already-installed providers keeps `init` idempotent (re-runs, or providers
+    // staged out-of-band) instead of forcing a re-download.
+    let installed = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
+    for name in &chosen_names {
+        let package = &installer.index.providers[name].package;
+        if installed.installed().iter().any(|p| &p.manifest.name == package) {
+            println!("{name}: already installed, skipping");
+            continue;
+        }
+        install_one(ctx, &installer, name, scope, &lockfile)?;
+    }
+
+    // Ask ONLY the selected providers what they can be configured with — not
+    // every provider that happens to be installed.
+    let registry = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
+    let mut provider_tables: BTreeMap<String, toml::value::Table> = BTreeMap::new();
+    for short in &chosen_names {
+        // Match the installed plugin by the package name the registry declares
+        // for this short name (robust against name/short-name differences).
+        let package = &installer.index.providers[short].package;
+        let Some(p) = registry
+            .installed()
+            .iter()
+            .find(|p| &p.manifest.name == package)
+        else {
+            continue;
+        };
+        let mut proc = PluginProcess::launch(p, ctx.timeout)
+            .await
+            .map_err(|e| CliError::Runtime(e.message))?;
+        let schema = proc.describe(ctx.timeout).await.unwrap_or_default();
+        proc.shutdown().await;
+        if schema.is_empty() {
+            continue;
+        }
+        println!("\nConfigure provider `{short}` (press enter to accept defaults):");
+        let table = prompt_provider_config(&schema)?;
+        if !table.is_empty() {
+            provider_tables.insert(short.clone(), table);
+        }
+    }
+
+    // Environment + dotenv file.
+    let env_name = prompt::text("Default environment name", Some("dev"))?;
+    let env_name = if env_name.is_empty() {
+        "dev".to_string()
+    } else {
+        env_name
+    };
+    let env_file = prompt::text("Primary dotenv file", Some(".env"))?;
+
+    let config_path = PathBuf::from("dotenv-cloud.toml");
+    let content = render_init_config(&env_name, &env_file, &provider_tables)?;
+    std::fs::write(&config_path, content)
+        .map_err(|e| CliError::Runtime(format!("cannot write {}: {e}", config_path.display())))?;
+    println!("\nwrote {}", config_path.display());
+
+    write_lockfile(&lockfile, &registry)?;
+    println!("wrote {}", lockfile.display());
+    println!("init complete.");
+    Ok(0)
+}
+
+/// Prompt the user for each field in a provider's config schema, returning a
+/// TOML table. Dotted keys (e.g. `ssm.with_decryption`) nest into sub-tables.
+fn prompt_provider_config(schema: &[ConfigField]) -> CliResult<toml::value::Table> {
+    let mut table = toml::value::Table::new();
+    for field in schema {
+        let value = match field.kind {
+            FieldKind::Bool => {
+                let default = field
+                    .default
+                    .as_deref()
+                    .map(|d| d == "true")
+                    .unwrap_or(false);
+                toml::Value::Boolean(prompt::confirm(&field.label, default)?)
+            }
+            FieldKind::Integer => {
+                let answer = prompt::text(&field.label, field.default.as_deref())?;
+                if answer.is_empty() {
+                    if field.required {
+                        return Err(CliError::Usage(format!("`{}` is required", field.key)));
+                    }
+                    continue;
+                }
+                let n: i64 = answer
+                    .parse()
+                    .map_err(|_| CliError::Usage(format!("`{}` must be a number", field.key)))?;
+                toml::Value::Integer(n)
+            }
+            FieldKind::String => {
+                let answer = prompt::text(&field.label, field.default.as_deref())?;
+                if answer.is_empty() {
+                    if field.required {
+                        return Err(CliError::Usage(format!("`{}` is required", field.key)));
+                    }
+                    continue;
+                }
+                toml::Value::String(answer)
+            }
+        };
+        insert_dotted(&mut table, &field.key, value);
+    }
+    Ok(table)
+}
+
+/// Insert `value` at a possibly-dotted `key` path, creating sub-tables.
+fn insert_dotted(table: &mut toml::value::Table, key: &str, value: toml::Value) {
+    match key.split_once('.') {
+        None => {
+            table.insert(key.to_string(), value);
+        }
+        Some((head, rest)) => {
+            let entry = table
+                .entry(head.to_string())
+                .or_insert_with(|| toml::Value::Table(toml::value::Table::new()));
+            if let toml::Value::Table(sub) = entry {
+                insert_dotted(sub, rest, value);
+            }
+        }
+    }
+}
+
+/// Render a fresh `dotenv-cloud.toml` from the interactive answers.
+fn render_init_config(
+    env_name: &str,
+    env_file: &str,
+    provider_tables: &BTreeMap<String, toml::value::Table>,
+) -> CliResult<String> {
+    let mut root = toml::value::Table::new();
+    root.insert(
+        "default_environment".to_string(),
+        toml::Value::String(env_name.to_string()),
+    );
+
+    let mut env_table = toml::value::Table::new();
+    if !env_file.is_empty() && env_file != ".env" {
+        env_table.insert(
+            "env_file".to_string(),
+            toml::Value::String(env_file.to_string()),
+        );
+    }
+    let mut environments = toml::value::Table::new();
+    environments.insert(env_name.to_string(), toml::Value::Table(env_table));
+    root.insert("environment".to_string(), toml::Value::Table(environments));
+
+    if !provider_tables.is_empty() {
+        let mut providers = toml::value::Table::new();
+        for (name, table) in provider_tables {
+            providers.insert(name.clone(), toml::Value::Table(table.clone()));
+        }
+        root.insert("providers".to_string(), toml::Value::Table(providers));
+    }
+
+    let body = toml::to_string_pretty(&toml::Value::Table(root))
+        .map_err(|e| CliError::Runtime(format!("cannot render config: {e}")))?;
+    Ok(format!(
+        "# Generated by `dotenv-cloud init`. See the annotated reference for all options.\n{body}"
+    ))
 }
 
 /// Regenerate the lockfile from currently-installed providers, reusing the same
@@ -983,4 +1203,53 @@ fn filter_keys(
         .filter(|(k, _)| !exclude.contains(k))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    #[test]
+    fn insert_dotted_nests_subtables() {
+        let mut t = toml::value::Table::new();
+        insert_dotted(&mut t, "region", toml::Value::String("us-east-1".into()));
+        insert_dotted(&mut t, "ssm.with_decryption", toml::Value::Boolean(true));
+        insert_dotted(&mut t, "ssm.timeout", toml::Value::Integer(5));
+        assert_eq!(t["region"].as_str(), Some("us-east-1"));
+        let ssm = t["ssm"].as_table().unwrap();
+        assert_eq!(ssm["with_decryption"].as_bool(), Some(true));
+        assert_eq!(ssm["timeout"].as_integer(), Some(5));
+    }
+
+    #[test]
+    fn rendered_init_config_parses_back() {
+        let mut aws = toml::value::Table::new();
+        insert_dotted(&mut aws, "region", toml::Value::String("eu-west-1".into()));
+        insert_dotted(&mut aws, "ssm.with_decryption", toml::Value::Boolean(false));
+        let mut providers = BTreeMap::new();
+        providers.insert("aws".to_string(), aws);
+
+        let text = render_init_config("staging", ".env.staging", &providers).unwrap();
+        let cfg: Config = toml::from_str(&text).unwrap();
+        assert_eq!(cfg.default_environment.as_deref(), Some("staging"));
+        assert_eq!(cfg.environment("staging").env_file(), ".env.staging");
+        // The provider table round-trips, including the nested SSM sub-table.
+        let aws_cfg = cfg.providers.config_for_scheme("aws-ssm");
+        assert_eq!(aws_cfg["region"].as_str(), Some("eu-west-1"));
+        assert_eq!(
+            aws_cfg["ssm"]["with_decryption"].as_bool(),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn rendered_init_config_omits_default_env_file() {
+        let providers = BTreeMap::new();
+        let text = render_init_config("dev", ".env", &providers).unwrap();
+        // The default `.env` is not written out (it's the implicit default).
+        assert!(!text.contains("env_file"));
+        let cfg: Config = toml::from_str(&text).unwrap();
+        assert_eq!(cfg.environment("dev").env_file(), ".env");
+    }
 }

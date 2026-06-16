@@ -54,6 +54,57 @@ pub struct PluginInfo {
     pub schemes: Vec<String>,
 }
 
+/// Describe request (core -> plugin): asks for the plugin's configurable
+/// settings. Used by `dotenv-cloud init` to drive interactive configuration.
+#[derive(Debug, Serialize)]
+pub struct DescribeRequest {
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+}
+
+impl DescribeRequest {
+    pub fn new() -> Self {
+        DescribeRequest { kind: "describe" }
+    }
+}
+
+impl Default for DescribeRequest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Describe response (plugin -> core).
+#[derive(Debug, Deserialize)]
+pub struct DescribeResult {
+    #[serde(default)]
+    pub config_schema: Vec<ConfigField>,
+}
+
+/// One configurable provider setting (mirrors the shared protocol crate).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConfigField {
+    pub key: String,
+    pub label: String,
+    #[serde(default)]
+    pub kind: FieldKind,
+    #[serde(default)]
+    pub default: Option<String>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub secret: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldKind {
+    #[default]
+    String,
+    Bool,
+    Integer,
+}
+
 /// The reference payload sent to the plugin (matches spec §7.4).
 #[derive(Debug, Serialize)]
 pub struct ReferencePayload {
@@ -71,7 +122,7 @@ pub struct ResolveRequest {
     #[serde(rename = "type")]
     pub kind: &'static str,
     pub request_id: String,
-    pub profile: String,
+    pub environment: String,
     pub reference: ReferencePayload,
     pub provider_config: serde_json::Value,
 }

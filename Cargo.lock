@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "dotenv-cloud"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64",

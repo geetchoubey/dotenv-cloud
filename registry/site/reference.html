@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dotenv-cloud — configuration &amp; CLI reference</title>
+<meta name="description" content="Complete reference for the dotenv-cloud.toml config file and every CLI command and flag.">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="./style.css">
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("theme");
+      if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="./index.html">dotenv<span>-cloud</span></a>
+    <div class="bar-right">
+      <a class="btn secondary" href="./index.html">← Home</a>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle theme">
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<a id="top"></a>
+<div class="hero" style="padding:3rem 0 2rem">
+  <div class="wrap">
+    <h1 class="logo" style="font-size:2.2rem">Reference</h1>
+    <p class="tagline" style="font-size:1.05rem">Every <code>dotenv-cloud.toml</code> key and every CLI command &amp; flag.</p>
+    <nav class="toc">
+      <a href="#config">Config file</a>
+      <a href="#cli">CLI commands</a>
+      <a href="#global">Global flags</a>
+      <a href="#env">Environment</a>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+
+<!-- ============================== CONFIG ============================== -->
+<section id="config">
+  <h2>Configuration file — <code>dotenv-cloud.toml</code></h2>
+  <p>TOML is the config format. When <code>--config</code> / <code>DOTENV_CLOUD_CONFIG</code>
+  aren't set, dotenv-cloud searches the current directory and walks up parents
+  for the first file named <code>dotenv-cloud.toml</code>. Unknown keys are
+  <strong>rejected</strong> (typos surface in <code>validate</code>) — except the
+  free-form <code>[providers.*]</code> tables, which are passed through to plugins.
+  Every section is optional.</p>
+
+  <h3 id="config-profile">Top level &amp; profiles</h3>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>default_profile</code></td><td>string</td><td><code>"dev"</code></td><td>Profile used when neither <code>--profile</code> nor <code>DOTENV_CLOUD_PROFILE</code> is set.</td></tr>
+    <tr><td><code>[profile.&lt;name&gt;]</code> · <code>env_file</code></td><td>string</td><td><code>".env"</code></td><td>Primary dotenv file for that profile.</td></tr>
+    <tr><td><code>[profile.&lt;name&gt;]</code> · <code>env_local_file</code></td><td>string</td><td><code>".env.local"</code></td><td>Gitignored local-override file for that profile.</td></tr>
+  </table>
+  <div class="code"><pre>default_profile = "dev"
+
+[profile.prod]
+env_file = ".env.production"
+env_local_file = ".env.production.local"</pre></div>
+
+  <h3 id="config-defaults">[defaults]</h3>
+  <p>Static fallback values (lowest precedence by default). Free-form
+  string&nbsp;→&nbsp;string pairs.</p>
+  <div class="code"><pre>[defaults]
+LOG_LEVEL = "info"
+PORT = "3000"</pre></div>
+
+  <h3 id="config-precedence">[precedence]</h3>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>order</code></td><td>array of string</td><td><code>["cli","system","remote","env.local","env","defaults"]</code></td><td>Sources highest-precedence first. No duplicates. Omitted sources keep their default relative order.</td></tr>
+  </table>
+  <p class="muted">Allowed source identifiers:</p>
+  <table>
+    <tr><th>Identifier</th><th>Source</th></tr>
+    <tr><td><code>cli</code></td><td>Values from <code>--set KEY=VALUE</code></td></tr>
+    <tr><td><code>system</code></td><td>Variables already in the process environment</td></tr>
+    <tr><td><code>remote</code></td><td>Values resolved from secret references (<code>aws-sm://</code>, …)</td></tr>
+    <tr><td><code>env.local</code></td><td>The profile's <code>env_local_file</code></td></tr>
+    <tr><td><code>env</code></td><td>The profile's <code>env_file</code></td></tr>
+    <tr><td><code>defaults</code></td><td>The <code>[defaults]</code> table</td></tr>
+  </table>
+
+  <h3 id="config-providers">[providers.*]</h3>
+  <p>Per-provider configuration, passed straight through to the plugin as its
+  <code>provider_config</code> during resolution. The <strong>core does not validate</strong>
+  the keys inside these tables — they're defined by each provider. The keys below
+  are what the bundled AWS provider understands (examples, not a fixed schema).</p>
+  <div class="code"><pre><span class="d"># AWS provider — schemes aws-sm, aws-ssm</span>
+[providers.aws]
+region = "us-east-1"
+profile = "default"      <span class="d"># named profile from ~/.aws (omit for the default chain)</span>
+timeout_ms = 2000
+
+[providers.aws.ssm]
+with_decryption = true   <span class="d"># decrypt SecureString parameters</span></pre></div>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>[providers.paths]</code></td><td>table (name → path)</td><td>Explicit plugin locations keyed by provider short name. Takes priority over discovered providers. Point at the directory holding <code>manifest.toml</code> or directly at the executable.</td></tr>
+  </table>
+
+  <h3 id="config-registry">[provider_registry]</h3>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>url</code></td><td>string</td><td>public registry</td><td>Index URL. Supports <code>https://</code>, <code>file://</code>, or a local path. The <code>--registry</code> flag overrides it.</td></tr>
+    <tr><td><code>allow_unsigned</code></td><td>bool</td><td><code>false</code></td><td>Permit installing unsigned artifacts. By default every artifact's ed25519 signature is verified against the built-in trusted key.</td></tr>
+    <tr><td><code>install_scope</code></td><td>string</td><td><code>"project"</code></td><td><code>"project"</code> or <code>"user"</code>. In the current core the effective scope comes from <code>--project</code>/<code>--user</code>.</td></tr>
+    <tr><td><code>public_key</code></td><td>string</td><td>—</td><td>Additional base64 ed25519 public key trusted <em>in addition</em> to the built-in release key (for a custom/private registry).</td></tr>
+  </table>
+
+  <h3 id="config-resolution">[resolution]</h3>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>missing</code></td><td>string</td><td><code>"error"</code></td><td>Behavior when a referenced secret isn't found: <code>error</code>, <code>warn</code>, or <code>ignore</code>.</td></tr>
+    <tr><td><code>concurrency</code></td><td>integer</td><td><code>8</code></td><td>Max concurrent provider resolutions.</td></tr>
+  </table>
+
+  <h3 id="config-conflicts">[conflicts]</h3>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>warn_on_any_shadow</code></td><td>bool</td><td><code>false</code></td><td>Warn whenever any key is shadowed across sources.</td></tr>
+    <tr><td><code>error_on_shadow</code></td><td>array of string</td><td><code>[]</code></td><td>Treat shadowing of these specific keys as a hard error.</td></tr>
+  </table>
+
+  <h3 id="config-sensitive">[sensitive]</h3>
+  <table>
+    <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr><td><code>keys</code></td><td>array of string</td><td><code>[]</code></td><td>Key names to redact in diagnostics (also matched as case-insensitive substrings).</td></tr>
+    <tr><td><code>patterns</code></td><td>array of string</td><td><code>[]</code></td><td>Glob patterns; any matching key is redacted.</td></tr>
+  </table>
+  <p class="muted">Values resolved from remote references are always redacted, regardless of this list.</p>
+
+  <details>
+    <summary>Complete annotated example</summary>
+    <div class="code"><pre>default_profile = "dev"
+
+[profile.dev]
+env_file = ".env"
+env_local_file = ".env.local"
+
+[defaults]
+LOG_LEVEL = "info"
+
+[precedence]
+order = ["cli", "system", "remote", "env.local", "env", "defaults"]
+
+[providers.aws]
+region = "us-east-1"
+
+[provider_registry]
+url = "https://geetchoubey.github.io/dotenv-cloud/index.json"
+allow_unsigned = false
+
+[resolution]
+missing = "error"
+concurrency = 8
+
+[conflicts]
+warn_on_any_shadow = false
+error_on_shadow = []
+
+[sensitive]
+keys = ["DB_PASSWORD", "API_KEY"]
+patterns = ["*_TOKEN", "*_SECRET"]</pre></div>
+  </details>
+</section>
+
+<!-- ============================== GLOBAL FLAGS ============================== -->
+<section id="global">
+  <h2>Global flags</h2>
+  <p>These precede the subcommand and apply everywhere, e.g.
+  <code>dotenv-cloud --profile prod run -- ./app</code>.</p>
+  <table>
+    <tr><th>Flag</th><th>Argument</th><th>Description</th></tr>
+    <tr><td><code>--config</code></td><td>path</td><td>Use an explicit config file (skips discovery).</td></tr>
+    <tr><td><code>--profile</code></td><td>name</td><td>Select a named profile.</td></tr>
+    <tr><td><code>--env-file</code></td><td>path</td><td>Override the profile's <code>.env</code> path.</td></tr>
+    <tr><td><code>--env-local-file</code></td><td>path</td><td>Override the profile's <code>.env.local</code> path.</td></tr>
+    <tr><td><code>--no-env-file</code></td><td>—</td><td>Do not load <code>.env</code>.</td></tr>
+    <tr><td><code>--no-env-local</code></td><td>—</td><td>Do not load <code>.env.local</code>.</td></tr>
+    <tr><td><code>--set</code></td><td>KEY=VALUE</td><td>Add/override a value at CLI precedence. Repeatable.</td></tr>
+    <tr><td><code>--strict</code></td><td>—</td><td>Treat warnings as errors.</td></tr>
+    <tr><td><code>--timeout</code></td><td>duration</td><td>Provider request timeout, e.g. <code>2s</code>, <code>500ms</code>, <code>1500</code> (ms). Default <code>2s</code>.</td></tr>
+    <tr><td><code>--no-color</code></td><td>—</td><td>Disable colored output.</td></tr>
+    <tr><td><code>--verbose</code></td><td>—</td><td>Emit diagnostic metadata (no secrets).</td></tr>
+    <tr><td><code>--quiet</code></td><td>—</td><td>Suppress non-error output.</td></tr>
+    <tr><td><code>-h, --help</code> / <code>-V, --version</code></td><td>—</td><td>Help / version.</td></tr>
+  </table>
+</section>
+
+<!-- ============================== CLI ============================== -->
+<section id="cli">
+  <h2>Commands</h2>
+
+  <h3 id="cmd-init">init</h3>
+  <p>Scan config and dotenv files, install required providers, write the lockfile.</p>
+  <table>
+    <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
+    <tr><td><code>--yes</code></td><td>—</td><td>Actually install the missing providers (otherwise dry).</td></tr>
+    <tr><td><code>--upgrade</code></td><td>—</td><td>(Re)install all detected providers, not just missing ones.</td></tr>
+    <tr><td><code>--offline</code></td><td>—</td><td>Skip installation; report only.</td></tr>
+    <tr><td><code>--project</code> / <code>--user</code></td><td>—</td><td>Install scope (default project).</td></tr>
+    <tr><td><code>--registry</code></td><td>url</td><td>Override the registry index URL.</td></tr>
+    <tr><td><code>--lockfile</code></td><td>path</td><td>Lockfile path (default <code>dotenv-cloud.lock</code>).</td></tr>
+  </table>
+
+  <h3 id="cmd-run">run</h3>
+  <p>Resolve the environment and execute a child process. The command follows <code>--</code>.</p>
+  <div class="code"><pre>dotenv-cloud run --require DB_PASSWORD -- node server.js</pre></div>
+  <table>
+    <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
+    <tr><td><code>--clear-env</code></td><td>—</td><td>Start the child with only the resolved env, not the inherited system env.</td></tr>
+    <tr><td><code>--preserve</code></td><td>VARS</td><td>Comma-separated system vars to keep when <code>--clear-env</code> is used.</td></tr>
+    <tr><td><code>--require</code></td><td>KEY</td><td>Fail if the key is absent after resolution. Repeatable.</td></tr>
+    <tr><td><code>--dry-run</code></td><td>—</td><td>Print a redacted summary and exit without running.</td></tr>
+    <tr><td><code>--redact-summary</code></td><td>—</td><td>Print a redacted source summary, then run.</td></tr>
+    <tr><td><code>--install-missing-providers</code></td><td>—</td><td>Install any missing providers before resolving.</td></tr>
+  </table>
+
+  <h3 id="cmd-export">export</h3>
+  <p>Print shell-compatible assignments for the resolved environment.</p>
+  <table>
+    <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
+    <tr><td><code>--shell</code> / <code>--format</code></td><td>shell</td><td><code>bash</code> (default), <code>zsh</code>, <code>fish</code>, <code>powershell</code> (aliases <code>pwsh</code>, <code>ps1</code>).</td></tr>
+    <tr><td><code>--include</code></td><td>KEY</td><td>Only emit these keys. Repeatable.</td></tr>
+    <tr><td><code>--exclude</code></td><td>KEY</td><td>Omit these keys. Repeatable.</td></tr>
+    <tr><td><code>--no-comments</code></td><td>—</td><td>Omit the generated header comment.</td></tr>
+  </table>
+
+  <h3 id="cmd-build">build</h3>
+  <p>Materialize the resolved environment to a file or stdout.</p>
+  <table>
+    <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
+    <tr><td><code>--mode</code></td><td>dotenv|json</td><td>Output format (default <code>dotenv</code>).</td></tr>
+    <tr><td><code>--output</code></td><td>path</td><td>Write to a file instead of stdout.</td></tr>
+    <tr><td><code>--force</code></td><td>—</td><td>Overwrite an existing output file.</td></tr>
+    <tr><td><code>--chmod</code></td><td>mode</td><td>File mode for the output (default <code>0600</code>; Unix).</td></tr>
+    <tr><td><code>--include</code> / <code>--exclude</code></td><td>KEY</td><td>Key filters. Repeatable.</td></tr>
+  </table>
+
+  <h3 id="cmd-resolve">resolve</h3>
+  <p>Resolve and print one key (redacted unless <code>--show</code>).</p>
+  <table>
+    <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
+    <tr><td><code>&lt;key&gt;</code></td><td>positional</td><td>The key to resolve.</td></tr>
+    <tr><td><code>--show</code></td><td>—</td><td>Print the actual value instead of a redaction.</td></tr>
+    <tr><td><code>--json</code></td><td>—</td><td>JSON output.</td></tr>
+    <tr><td><code>--source</code></td><td>—</td><td>Include winning source and shadowed sources.</td></tr>
+  </table>
+
+  <h3 id="cmd-validate">validate</h3>
+  <p>Parse config, check references, optionally contact providers.</p>
+  <table>
+    <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
+    <tr><td><code>--providers</code></td><td>—</td><td>Also perform a provider connectivity/handshake check.</td></tr>
+    <tr><td><code>--no-providers</code></td><td>—</td><td>Skip the provider check.</td></tr>
+    <tr><td><code>--all-profiles</code></td><td>—</td><td>Validate across all configured profiles.</td></tr>
+    <tr><td><code>--json</code></td><td>—</td><td>JSON output.</td></tr>
+  </table>
+
+  <h3 id="cmd-doctor">doctor</h3>
+  <p>Diagnose local setup, credentials, config, and installed providers. No flags.</p>
+
+  <h3 id="cmd-providers">providers</h3>
+  <p>Manage externally installed provider plugins.</p>
+  <table>
+    <tr><th>Subcommand</th><th>Args &amp; flags</th><th>Description</th></tr>
+    <tr><td><code>list</code></td><td><code>--json</code></td><td>List installed providers.</td></tr>
+    <tr><td><code>search &lt;query&gt;</code></td><td><code>--registry</code></td><td>Search the registry.</td></tr>
+    <tr><td><code>install &lt;name&gt;</code></td><td><code>--registry --project --user --yes --allow-unsigned --json</code></td><td>Download, verify, install. Pin with <code>name@version</code>.</td></tr>
+    <tr><td><code>update [name]</code></td><td><code>--registry --project --user --yes --allow-unsigned</code></td><td>Update one provider, or all if omitted.</td></tr>
+    <tr><td><code>info &lt;name&gt;</code></td><td><code>--json</code></td><td>Show provider metadata, schemes, version, integrity.</td></tr>
+    <tr><td><code>remove &lt;name&gt;</code></td><td><code>--yes</code></td><td>Remove an installed provider.</td></tr>
+  </table>
+  <table>
+    <tr><th>Shared flag</th><th>Description</th></tr>
+    <tr><td><code>--registry &lt;url&gt;</code></td><td>Override the registry index URL.</td></tr>
+    <tr><td><code>--project</code> / <code>--user</code></td><td>Install scope (default project).</td></tr>
+    <tr><td><code>--allow-unsigned</code></td><td>Install without a verified signature.</td></tr>
+    <tr><td><code>--yes</code></td><td>Skip the confirmation prompt.</td></tr>
+  </table>
+</section>
+
+<!-- ============================== ENV ============================== -->
+<section id="env">
+  <h2>Environment variables</h2>
+  <table>
+    <tr><th>Variable</th><th>Used by</th><th>Description</th></tr>
+    <tr><td><code>DOTENV_CLOUD_CONFIG</code></td><td>all commands</td><td>Path to a config file; skips discovery.</td></tr>
+    <tr><td><code>DOTENV_CLOUD_PROFILE</code></td><td>all commands</td><td>Active profile (overrides <code>default_profile</code>; beaten by <code>--profile</code>).</td></tr>
+    <tr><td><code>DOTENV_CLOUD_VERSION</code></td><td>install script</td><td>Version tag to install, e.g. <code>v0.1.0-beta.3</code>.</td></tr>
+    <tr><td><code>DOTENV_CLOUD_BIN_DIR</code></td><td>install script</td><td>Install directory (default <code>~/.local/bin</code>).</td></tr>
+    <tr><td><code>DOTENV_CLOUD_TARGET</code></td><td>install script</td><td>Force a target triple instead of auto-detecting.</td></tr>
+  </table>
+  <p class="muted">Maintainer tooling: <code>dotenv-cloud sign</code> reads the signing key from
+  <code>DOTENV_CLOUD_SIGNING_KEY</code>; <code>dotenv-cloud keygen</code> generates a keypair.</p>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>
+      <a href="./index.html">Home</a> ·
+      <a href="https://github.com/geetchoubey/dotenv-cloud">GitHub</a> ·
+      <a href="./index.json">index.json</a> ·
+      <a href="https://github.com/geetchoubey/dotenv-cloud/releases">Releases</a>
+    </p>
+    <p class="muted">MIT OR Apache-2.0 · Secrets stay in your vault.</p>
+  </div>
+</footer>
+
+<script src="./app.js" defer></script>
+</body>
+</html>

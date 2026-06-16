@@ -171,6 +171,19 @@ fn clear_env_preserve_keeps_named_system_var() {
 }
 
 #[test]
+fn completions_emit_script_per_shell() {
+    for (shell, needle) in [("bash", "dotenv-cloud"), ("zsh", "#compdef")] {
+        let out = bin().args(["completions", shell]).output().unwrap();
+        assert!(out.status.success(), "completions {shell} failed");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains(needle),
+            "completions {shell} missing `{needle}`: {stdout}"
+        );
+    }
+}
+
+#[test]
 fn system_overrides_env_by_default_precedence() {
     // With the default order (system > env), a process env var wins over .env.
     let dir = temp_project("FOO=fromfile\n");

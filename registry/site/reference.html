@@ -294,6 +294,20 @@ patterns = ["*_TOKEN", "*_SECRET"]</pre></div>
     <tr><td><code>--allow-unsigned</code></td><td>Install without a verified signature.</td></tr>
     <tr><td><code>--yes</code></td><td>Skip the confirmation prompt.</td></tr>
   </table>
+
+  <h3 id="cmd-completions">completions</h3>
+  <p>Print a shell completion script. Homebrew installs these automatically, and
+  the install script wires them into your shell; you can also enable them
+  manually:</p>
+  <div class="code"><pre><span class="d"># bash / zsh — add to your rc file</span>
+eval "$(dotenv-cloud completions zsh)"
+
+<span class="d"># fish</span>
+dotenv-cloud completions fish > ~/.config/fish/completions/dotenv-cloud.fish</pre></div>
+  <table>
+    <tr><th>Argument</th><th>Description</th></tr>
+    <tr><td><code>&lt;shell&gt;</code></td><td><code>bash</code>, <code>zsh</code>, <code>fish</code>, <code>powershell</code>, or <code>elvish</code>.</td></tr>
+  </table>
 </section>
 
 <!-- ============================== ENV ============================== -->
@@ -306,6 +320,7 @@ patterns = ["*_TOKEN", "*_SECRET"]</pre></div>
     <tr><td><code>DOTENV_CLOUD_VERSION</code></td><td>install script</td><td>Version tag to install, e.g. <code>v0.1.0-beta.3</code>.</td></tr>
     <tr><td><code>DOTENV_CLOUD_BIN_DIR</code></td><td>install script</td><td>Install directory (default <code>~/.local/bin</code>).</td></tr>
     <tr><td><code>DOTENV_CLOUD_TARGET</code></td><td>install script</td><td>Force a target triple instead of auto-detecting.</td></tr>
+    <tr><td><code>DOTENV_CLOUD_NO_COMPLETIONS</code></td><td>install script</td><td>Skip wiring shell completions into your rc file.</td></tr>
   </table>
   <p class="muted">Maintainer tooling: <code>dotenv-cloud sign</code> reads the signing key from
   <code>DOTENV_CLOUD_SIGNING_KEY</code>; <code>dotenv-cloud keygen</code> generates a keypair.</p>

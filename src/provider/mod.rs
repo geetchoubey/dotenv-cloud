@@ -132,8 +132,11 @@ impl<'a> ResolverHost<'a> {
             })?
             .clone();
 
-        let cache_key =
-            SecretCache::key(&provider.manifest.name, &reference.original, &self.environment);
+        let cache_key = SecretCache::key(
+            &provider.manifest.name,
+            &reference.original,
+            &self.environment,
+        );
         if let Some(cached) = self.cache.get(&cache_key) {
             return Ok(ResolvedSecret {
                 value: cached,

@@ -763,7 +763,11 @@ async fn init_interactive(ctx: &Ctx, args: InitArgs) -> CliResult<i32> {
     let installed = ProviderRegistry::discover(&ctx.config).map_err(CliError::Config)?;
     for name in &chosen_names {
         let package = &installer.index.providers[name].package;
-        if installed.installed().iter().any(|p| &p.manifest.name == package) {
+        if installed
+            .installed()
+            .iter()
+            .any(|p| &p.manifest.name == package)
+        {
             println!("{name}: already installed, skipping");
             continue;
         }
@@ -1237,10 +1241,7 @@ mod tests {
         // The provider table round-trips, including the nested SSM sub-table.
         let aws_cfg = cfg.providers.config_for_scheme("aws-ssm");
         assert_eq!(aws_cfg["region"].as_str(), Some("eu-west-1"));
-        assert_eq!(
-            aws_cfg["ssm"]["with_decryption"].as_bool(),
-            Some(false)
-        );
+        assert_eq!(aws_cfg["ssm"]["with_decryption"].as_bool(), Some(false));
     }
 
     #[test]

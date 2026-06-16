@@ -98,10 +98,7 @@ fn remote_failure_falls_back_to_environment_default() {
         "should succeed via fallback; stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert_eq!(
-        String::from_utf8_lossy(&out.stdout).trim(),
-        "local-default"
-    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "local-default");
     // The fallback is announced on stderr, and the reference stays redacted.
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(

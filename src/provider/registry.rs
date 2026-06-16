@@ -367,6 +367,15 @@ impl Installer {
         let dest = scope.providers_root()?.join(short);
         install_archive(&bytes, &dest)?;
 
+        // Record the verified integrity in the installed manifest so the
+        // lockfile can be regenerated offline (e.g. `init` when the provider is
+        // already installed) without re-fetching the registry.
+        write_installed_integrity(
+            &dest.join("manifest.toml"),
+            &artifact.sha256,
+            artifact.signature.as_deref(),
+        )?;
+
         Ok(InstalledRecord {
             name: short.clone(),
             package: provider.package.clone(),
@@ -376,6 +385,30 @@ impl Installer {
             sha256: artifact.sha256.clone(),
         })
     }
+}
+
+/// Write the verified `sha256` (and optional `signature`) into the installed
+/// manifest's `[integrity]` table. Comments in the installed copy are not
+/// preserved, but all manifest keys are.
+fn write_installed_integrity(
+    manifest_path: &Path,
+    sha256: &str,
+    signature: Option<&str>,
+) -> Result<(), String> {
+    let text = std::fs::read_to_string(manifest_path).map_err(|e| e.to_string())?;
+    let mut doc: toml::Value =
+        toml::from_str(&text).map_err(|e| format!("invalid installed manifest: {e}"))?;
+    let table = doc.as_table_mut().ok_or("manifest is not a table")?;
+
+    let mut integrity = toml::value::Table::new();
+    integrity.insert("sha256".into(), toml::Value::String(sha256.to_string()));
+    if let Some(sig) = signature {
+        integrity.insert("signature".into(), toml::Value::String(sig.to_string()));
+    }
+    table.insert("integrity".into(), toml::Value::Table(integrity));
+
+    let serialized = toml::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+    std::fs::write(manifest_path, serialized).map_err(|e| e.to_string())
 }
 
 /// Unpack a `.tar.gz` archive and install its `manifest.toml` + executable into
@@ -500,7 +533,7 @@ mod tests {
             "providers": {
                 "aws": {
                     "package": "dotenv-cloud-provider-aws",
-                    "schemes": ["aws-sm", "aws-ssm"],
+                    "schemes": ["aws-secrets", "aws-ssm"],
                     "versions": {
                         "0.1.0-beta.1": {"targets": {}},
                         "0.1.0": {"targets": {}}
@@ -509,7 +542,7 @@ mod tests {
             }
         }"#;
         let index = Index::parse(json.as_bytes()).unwrap();
-        assert_eq!(index.name_for_scheme("aws-sm"), Some("aws"));
+        assert_eq!(index.name_for_scheme("aws-secrets"), Some("aws"));
         let (_, p) = index.provider("aws").unwrap();
         let (v, _) = p.select_version(None).unwrap();
         assert_eq!(v, "0.1.0"); // stable outranks beta
@@ -566,7 +599,7 @@ mod tests {
             name: "aws".into(),
             package: "dotenv-cloud-provider-aws".into(),
             version: "0.1.0-beta.1".into(),
-            schemes: vec!["aws-sm".into(), "aws-ssm".into()],
+            schemes: vec!["aws-secrets".into(), "aws-ssm".into()],
             source: "registry:file://x".into(),
             sha256: "deadbeef".into(),
         };

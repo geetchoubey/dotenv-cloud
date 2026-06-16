@@ -71,7 +71,7 @@ fn glob_match(pattern: &str, value: &str) -> bool {
 
 /// Redact a remote URI reference conservatively (spec §13.3):
 ///
-/// * `aws-sm://prod/db/password` -> `aws-sm://prod/db/[redacted]`
+/// * `aws-secrets://prod/db/password` -> `aws-secrets://prod/db/[redacted]`
 /// * `vault://kv/data/app#api_key` -> `vault://kv/data/app#[redacted]`
 pub fn redact_uri(original: &str) -> String {
     // When a fragment is present, redact only the fragment and keep the path
@@ -120,8 +120,8 @@ mod tests {
     #[test]
     fn uri_redaction_path_and_fragment() {
         assert_eq!(
-            redact_uri("aws-sm://prod/db/password"),
-            "aws-sm://prod/db/[redacted]"
+            redact_uri("aws-secrets://prod/db/password"),
+            "aws-secrets://prod/db/[redacted]"
         );
         assert_eq!(
             redact_uri("vault://kv/data/app#api_key"),

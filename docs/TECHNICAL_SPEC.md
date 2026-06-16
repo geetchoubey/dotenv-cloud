@@ -91,7 +91,7 @@ dotenv-cloud run -- java -jar app.jar
                                      v
                          +-----------------------+
                          | Secret Reference Scan |
-                         | aws-sm:// vault://    |
+                         | aws-secrets:// vault://    |
                          +-----------+-----------+
                                      |
                                      v
@@ -152,7 +152,7 @@ Example:
 
 ```dotenv
 # .env
-DB_PASSWORD=aws-sm://prod/db/password
+DB_PASSWORD=aws-secrets://prod/db/password
 ```
 
 If `DB_PASSWORD` is not provided by CLI flags or the system environment, `dotenv-cloud` resolves the AWS Secrets Manager URI and uses the resolved secret.
@@ -187,7 +187,7 @@ For safety, `dotenv-cloud validate` must warn when `remote` is configured above 
 
 A value is considered a secret reference if it begins with a supported provider URI scheme:
 
-- `aws-sm://`
+- `aws-secrets://`
 - `aws-ssm://`
 - `vault://`
 
@@ -198,10 +198,10 @@ Detection is exact and case-sensitive. Plain values such as `REGION=us-east-1` a
 AWS Secrets Manager:
 
 ```dotenv
-DB_PASSWORD=aws-sm://prod/db/password
-DB_PASSWORD=aws-sm://prod/db/password#password
-DB_PASSWORD=aws-sm://prod/db/password?version_id=abc
-DB_PASSWORD=aws-sm://prod/db/password?version_stage=AWSCURRENT
+DB_PASSWORD=aws-secrets://prod/db/password
+DB_PASSWORD=aws-secrets://prod/db/password#password
+DB_PASSWORD=aws-secrets://prod/db/password?version_id=abc
+DB_PASSWORD=aws-secrets://prod/db/password?version_stage=AWSCURRENT
 ```
 
 AWS SSM Parameter Store:
@@ -239,7 +239,7 @@ If a provider returns a JSON object and the URI contains a fragment, the fragmen
 Example:
 
 ```dotenv
-API_KEY=aws-sm://prod/app/config#api_key
+API_KEY=aws-secrets://prod/app/config#api_key
 ```
 
 If the secret string is:
@@ -289,7 +289,7 @@ The official V1 provider plugins are:
 
 | Plugin | Schemes | Provider APIs |
 | --- | --- | --- |
-| `dotenv-cloud-provider-aws` | `aws-sm`, `aws-ssm` | AWS Secrets Manager, AWS SSM Parameter Store |
+| `dotenv-cloud-provider-aws` | `aws-secrets`, `aws-ssm` | AWS Secrets Manager, AWS SSM Parameter Store |
 | `dotenv-cloud-provider-vault` | `vault` | HashiCorp Vault KV v1/v2 |
 
 Azure Key Vault should use the same external plugin model if added:
@@ -319,7 +319,7 @@ name = "dotenv-cloud-provider-aws"
 version = "1.0.0"
 protocol_version = "1"
 executable = "dotenv-cloud-provider-aws"
-schemes = ["aws-sm", "aws-ssm"]
+schemes = ["aws-secrets", "aws-ssm"]
 description = "AWS Secrets Manager and SSM provider for dotenv-cloud"
 
 [integrity]
@@ -366,7 +366,7 @@ version = 1
 [[provider]]
 name = "dotenv-cloud-provider-aws"
 version = "1.0.0"
-schemes = ["aws-sm", "aws-ssm"]
+schemes = ["aws-secrets", "aws-ssm"]
 source = "registry:official/aws"
 sha256 = "..."
 
@@ -381,7 +381,7 @@ sha256 = "..."
 `dotenv-cloud run` must not auto-install providers by default. If a required provider is missing, it should fail with an actionable message:
 
 ```text
-error: no provider installed for scheme aws-sm
+error: no provider installed for scheme aws-secrets
 hint: run `dotenv-cloud init` or `dotenv-cloud providers install aws`
 ```
 
@@ -416,7 +416,7 @@ Handshake response:
   "plugin": {
     "name": "dotenv-cloud-provider-aws",
     "version": "1.0.0",
-    "schemes": ["aws-sm", "aws-ssm"]
+    "schemes": ["aws-secrets", "aws-ssm"]
   }
 }
 ```
@@ -429,8 +429,8 @@ Resolve request:
   "request_id": "01J...",
   "profile": "dev",
   "reference": {
-    "original": "aws-sm://prod/db/password",
-    "scheme": "aws-sm",
+    "original": "aws-secrets://prod/db/password",
+    "scheme": "aws-secrets",
     "authority": "prod",
     "path": "/db/password",
     "fragment": null,
@@ -452,7 +452,7 @@ Resolve response:
   "request_id": "01J...",
   "value": "secret-value",
   "metadata": {
-    "provider": "aws-sm",
+    "provider": "aws-secrets",
     "version": "AWSCURRENT"
   }
 }
@@ -466,7 +466,7 @@ Error response:
   "request_id": "01J...",
   "class": "PermissionDenied",
   "message": "access denied",
-  "reference": "aws-sm://prod/db/[redacted]"
+  "reference": "aws-secrets://prod/db/[redacted]"
 }
 ```
 
@@ -529,7 +529,7 @@ pub struct SecretMetadata {
 Providers are registered by scheme from installed manifests:
 
 ```text
-aws-sm  -> dotenv-cloud-provider-aws
+aws-secrets  -> dotenv-cloud-provider-aws
 aws-ssm -> dotenv-cloud-provider-aws
 vault   -> dotenv-cloud-provider-vault
 ```
@@ -568,7 +568,7 @@ dotenv-cloud-provider-aws
 Scheme:
 
 ```text
-aws-sm://
+aws-secrets://
 ```
 
 Authentication:
@@ -596,8 +596,8 @@ Resolution:
 Example:
 
 ```dotenv
-DB_PASSWORD=aws-sm://prod/db/password
-API_KEY=aws-sm://prod/app/config#api_key
+DB_PASSWORD=aws-secrets://prod/db/password
+API_KEY=aws-secrets://prod/app/config#api_key
 ```
 
 Error behavior:
@@ -1022,7 +1022,7 @@ Flags:
 Default output is redacted:
 
 ```text
-DB_PASSWORD=[redacted] source=remote provider=aws-sm
+DB_PASSWORD=[redacted] source=remote provider=aws-secrets
 ```
 
 ### 10.8 `validate`
@@ -1105,7 +1105,7 @@ Subcommands:
 List output:
 
 ```text
-aws    installed   version=1.0.0   schemes=aws-sm,aws-ssm   configured=yes
+aws    installed   version=1.0.0   schemes=aws-secrets,aws-ssm   configured=yes
 vault  missing     required=yes     schemes=vault            configured=yes
 ```
 
@@ -1241,7 +1241,7 @@ abcd...wxyz
 Remote URI references should be redacted conservatively:
 
 ```text
-aws-sm://prod/db/password -> aws-sm://prod/db/[redacted]
+aws-secrets://prod/db/password -> aws-secrets://prod/db/[redacted]
 vault://kv/data/app#api_key -> vault://kv/data/app#[redacted]
 ```
 
@@ -1387,7 +1387,7 @@ REGION=us-east-1
 PORT=3000
 
 # Remote references
-DB_PASSWORD=aws-sm://prod/db/password
+DB_PASSWORD=aws-secrets://prod/db/password
 API_KEY=vault://kv/data/app#api_key
 ```
 
@@ -1458,14 +1458,14 @@ the resolver must detect cycles and return a validation error:
 circular reference detected: A -> B -> A
 ```
 
-If a remote secret returns a value that itself looks like `aws-sm://...`, it is treated as a literal value by default. Recursive remote resolution is disabled in V1.
+If a remote secret returns a value that itself looks like `aws-secrets://...`, it is treated as a literal value by default. Recursive remote resolution is disabled in V1.
 
 ### 18.4 Invalid URI Formats
 
 Invalid URI examples:
 
 ```dotenv
-BAD=aws-sm://
+BAD=aws-secrets://
 BAD=vault://#key
 BAD=aws-ssm://
 ```
@@ -1519,7 +1519,7 @@ Behavior:
 Binary provider values are rejected by default unless explicitly encoded:
 
 ```dotenv
-CERT=aws-sm://prod/cert?binary=base64
+CERT=aws-secrets://prod/cert?binary=base64
 ```
 
 V1 should support base64 output only.
@@ -1589,8 +1589,8 @@ Errors should be concise and actionable:
 
 ```text
 error: failed to resolve DB_PASSWORD
-provider: aws-sm
-reference: aws-sm://prod/db/[redacted]
+provider: aws-secrets
+reference: aws-secrets://prod/db/[redacted]
 reason: secret not found
 ```
 
@@ -1604,8 +1604,8 @@ Commands with `--json` should produce stable machine-readable output:
   "errors": [
     {
       "key": "DB_PASSWORD",
-      "provider": "aws-sm",
-      "reference": "aws-sm://prod/db/[redacted]",
+      "provider": "aws-secrets",
+      "reference": "aws-secrets://prod/db/[redacted]",
       "class": "NotFound",
       "message": "secret not found"
     }
@@ -1687,7 +1687,7 @@ No alternate product or binary name should be used.
 
 ```dotenv
 REGION=us-east-1
-DB_PASSWORD=aws-sm://dev/db/password
+DB_PASSWORD=aws-secrets://dev/db/password
 API_KEY=vault://kv/data/myapp#api_key
 ```
 
@@ -1707,7 +1707,7 @@ dotenv-cloud resolve DB_PASSWORD
 Output:
 
 ```text
-DB_PASSWORD=[redacted] source=remote provider=aws-sm
+DB_PASSWORD=[redacted] source=remote provider=aws-secrets
 ```
 
 Show value explicitly:

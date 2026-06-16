@@ -49,6 +49,9 @@ pub struct MergedEnv {
 pub struct ResolvedEnv {
     pub map: BTreeMap<String, String>,
     pub info: BTreeMap<String, KeyInfo>,
+    /// Precedence in effect, so callers can decide (per key) whether a project
+    /// value should override an inherited `system` variable.
+    pub precedence: Precedence,
 }
 
 /// Phase 1: load all sources and apply precedence, including remote promotion
@@ -67,10 +70,12 @@ pub fn merge(config: &Config, profile_name: &str, opts: &LoadOptions) -> CliResu
         engine.add(k.clone(), Source::Cli, v.clone());
     }
 
-    // System environment (literal).
-    for (k, v) in std::env::vars() {
-        engine.add(k, Source::System, v);
-    }
+    // The process environment (`system`) is intentionally NOT loaded as a value
+    // source here. It is ambient context: a child launched by `run` inherits it
+    // automatically, and `export`/`build` must emit only the project's own
+    // environment (`.env`, `.env.local`, remote, defaults, `--set`) — not the
+    // entire shell. The `system` precedence rank still governs, at exec time,
+    // whether a project value overrides an inherited system variable.
 
     // .env.local
     if !opts.no_env_local {
@@ -149,6 +154,7 @@ pub async fn resolve(
 ) -> CliResult<ResolvedEnv> {
     let mut map = BTreeMap::new();
     let mut info = BTreeMap::new();
+    let precedence = merged.precedence.clone();
     let missing_policy = config.resolution.missing.clone();
 
     let mut host = ResolverHost::new(registry, config, profile_name.to_string(), timeout);
@@ -208,13 +214,12 @@ pub async fn resolve(
                     continue; // skip this key
                 }
                 host.shutdown().await;
-                let detail = format!(
-                    "failed to resolve {}\nprovider: {}\nreference: {}\nclass: {}\nreason: {}",
-                    winner.key,
-                    reference.scheme,
+                let detail = format_resolution_failure(
+                    &winner.key,
+                    &reference.scheme,
                     e.reference_redacted.as_deref().unwrap_or(&redacted),
                     e.class,
-                    e.message
+                    &e.message,
                 );
                 return Err(map_provider_error(e.class, detail));
             }
@@ -222,7 +227,11 @@ pub async fn resolve(
     }
 
     host.shutdown().await;
-    Ok(ResolvedEnv { map, info })
+    Ok(ResolvedEnv {
+        map,
+        info,
+        precedence,
+    })
 }
 
 /// Resolve a single key from already-merged winners (for `resolve <KEY>`).
@@ -272,16 +281,61 @@ pub async fn resolve_one(
             },
         ))),
         Err(e) => {
-            let detail = format!(
-                "failed to resolve {key}\nprovider: {}\nreference: {}\nclass: {}\nreason: {}",
-                reference.scheme,
+            let detail = format_resolution_failure(
+                key,
+                &reference.scheme,
                 e.reference_redacted.as_deref().unwrap_or(&redacted),
                 e.class,
-                e.message
+                &e.message,
             );
             Err(map_provider_error(e.class, detail))
         }
     }
+}
+
+/// Build a rich, aligned failure message that puts the unresolved key front and
+/// center and adds a class-specific hint.
+fn format_resolution_failure(
+    key: &str,
+    scheme: &str,
+    reference_redacted: &str,
+    class: crate::error::ProviderErrorClass,
+    message: &str,
+) -> String {
+    use crate::error::ProviderErrorClass::*;
+    let hint = match class {
+        NotFound => Some(
+            "no secret or parameter exists at that path — check the name, AWS region, and account",
+        ),
+        AuthenticationFailed => Some(
+            "authentication failed — check your provider credentials (env, shared config, or role)",
+        ),
+        PermissionDenied => {
+            Some("access was denied — check the IAM/policy permissions for this identity")
+        }
+        Timeout => Some("the request timed out — check connectivity or raise --timeout"),
+        Network | ProviderUnavailable => {
+            Some("could not reach the provider — check your network and endpoint")
+        }
+        RateLimited => Some("the provider is rate-limiting requests — retry shortly"),
+        InvalidReference => Some("the reference URI is malformed — check its syntax"),
+        InvalidSecretPayload => {
+            Some("the secret value could not be parsed — check the field/format selector")
+        }
+        Internal => None,
+    };
+
+    let mut lines = vec![
+        format!("could not resolve key `{key}`"),
+        format!("  {:<11}{scheme}", "provider:"),
+        format!("  {:<11}{reference_redacted}", "reference:"),
+        format!("  {:<11}{class}", "class:"),
+        format!("  {:<11}{message}", "reason:"),
+    ];
+    if let Some(h) = hint {
+        lines.push(format!("  {:<11}{h}", "hint:"));
+    }
+    lines.join("\n")
 }
 
 fn map_provider_error(class: crate::error::ProviderErrorClass, detail: String) -> CliError {
@@ -290,5 +344,42 @@ fn map_provider_error(class: crate::error::ProviderErrorClass, detail: String) -
         AuthenticationFailed | PermissionDenied => CliError::ProviderAuth(detail),
         Timeout | RateLimited | Network | ProviderUnavailable => CliError::ProviderNetwork(detail),
         _ => CliError::SecretResolution(detail),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::ProviderErrorClass;
+
+    #[test]
+    fn resolution_failure_highlights_key_and_hint() {
+        let msg = format_resolution_failure(
+            "name",
+            "aws-ssm",
+            "aws-ssm://prod/test/[redacted]",
+            ProviderErrorClass::NotFound,
+            "AWS error: ParameterNotFound",
+        );
+        // Key is prominent on the first line, in backticks.
+        assert_eq!(msg.lines().next().unwrap(), "could not resolve key `name`");
+        // Aligned, labeled fields and a class-specific hint are present.
+        assert!(msg.contains("reference: aws-ssm://prod/test/[redacted]"));
+        assert!(msg.contains("class:     NotFound"));
+        assert!(msg.contains("hint:"));
+        // The redacted reference is preserved (no raw secret path).
+        assert!(!msg.contains("prod/test/name"));
+    }
+
+    #[test]
+    fn resolution_failure_internal_has_no_hint() {
+        let msg = format_resolution_failure(
+            "X",
+            "vault",
+            "vault://x/[redacted]",
+            ProviderErrorClass::Internal,
+            "boom",
+        );
+        assert!(!msg.contains("hint:"));
     }
 }

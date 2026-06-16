@@ -174,7 +174,7 @@ impl<'a> ResolverHost<'a> {
 /// Map a scheme to its suggested provider package name for install hints.
 pub fn suggest_package(scheme: &str) -> &'static str {
     match scheme {
-        "aws-sm" | "aws-ssm" => "aws",
+        "aws-secrets" | "aws-ssm" => "aws",
         "vault" => "vault",
         "azure-keyvault" | "az-kv" => "azure-keyvault",
         _ => scheme_static(scheme),
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn package_suggestions() {
-        assert_eq!(suggest_package("aws-sm"), "aws");
+        assert_eq!(suggest_package("aws-secrets"), "aws");
         assert_eq!(suggest_package("vault"), "vault");
     }
 }

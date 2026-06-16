@@ -76,7 +76,7 @@ PORT = "3000"
 # Allowed source identifiers (exactly these; unknown values are rejected):
 #   cli        — values passed via `--set KEY=VALUE` on the command line
 #   system     — variables already present in the process environment
-#   remote     — values resolved from secret references (aws-sm://, vault://, …)
+#   remote     — values resolved from secret references (aws-secrets://, vault://, …)
 #   env.local  — the profile's env_local_file
 #   env        — the profile's env_file
 #   defaults   — the [defaults] table above
@@ -97,7 +97,7 @@ order = ["cli", "system", "remote", "env.local", "env", "defaults"]
 # plugin — so the keys below are examples of what the bundled AWS and Vault
 # providers understand, not a fixed schema.
 
-# AWS provider (schemes: aws-sm, aws-ssm) — referenced as aws-sm://… / aws-ssm://…
+# AWS provider (schemes: aws-secrets, aws-ssm) — referenced as aws-secrets://… / aws-ssm://…
 [providers.aws]
 region = "us-east-1"   # AWS region for the API calls
 profile = "default"    # named profile from ~/.aws/credentials (omit to use the default chain)

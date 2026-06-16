@@ -59,7 +59,7 @@ fn run_without_separator_is_usage_error() {
 
 #[test]
 fn missing_provider_fails_closed() {
-    let dir = temp_project("DB_PASSWORD=aws-sm://prod/db/password\n");
+    let dir = temp_project("DB_PASSWORD=aws-secrets://prod/db/password\n");
     let out = bin()
         .current_dir(dir.path())
         .args(["--no-env-local", "run", "--", "true"])
@@ -106,4 +106,79 @@ fn malformed_dotenv_reports_parse_error() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(4));
+}
+
+#[test]
+fn export_emits_only_project_env_not_system() {
+    let dir = temp_project("FOO=bar\n");
+    let out = bin()
+        .current_dir(dir.path())
+        .env("DC_SYSTEM_ONLY", "leak")
+        .args(["--no-env-local", "export"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("FOO="), "project key should be present");
+    assert!(
+        !stdout.contains("DC_SYSTEM_ONLY"),
+        "system-only var must not leak into export: {stdout}"
+    );
+}
+
+#[test]
+fn clear_env_drops_system_but_keeps_project() {
+    let dir = temp_project("FOO=bar\n");
+    let out = bin()
+        .current_dir(dir.path())
+        .env("DC_SYSTEM_ONLY", "leak")
+        .args([
+            "--no-env-local",
+            "run",
+            "--clear-env",
+            "--",
+            "sh",
+            "-c",
+            "echo FOO=$FOO SYS=[$DC_SYSTEM_ONLY]",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "FOO=bar SYS=[]"
+    );
+}
+
+#[test]
+fn clear_env_preserve_keeps_named_system_var() {
+    let dir = temp_project("FOO=bar\n");
+    let out = bin()
+        .current_dir(dir.path())
+        .env("DC_SYSTEM_ONLY", "kept")
+        .args([
+            "--no-env-local",
+            "run",
+            "--clear-env",
+            "--preserve",
+            "DC_SYSTEM_ONLY",
+            "--",
+            "sh",
+            "-c",
+            "echo $DC_SYSTEM_ONLY",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "kept");
+}
+
+#[test]
+fn system_overrides_env_by_default_precedence() {
+    // With the default order (system > env), a process env var wins over .env.
+    let dir = temp_project("FOO=fromfile\n");
+    let out = bin()
+        .current_dir(dir.path())
+        .env("FOO", "fromsystem")
+        .args(["--no-env-local", "run", "--", "printenv", "FOO"])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "fromsystem");
 }

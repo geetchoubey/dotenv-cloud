@@ -34,7 +34,7 @@ fn build_archive(dir: &Path) -> (std::path::PathBuf, String) {
 version = "0.1.0"
 protocol_version = "1"
 executable = "dotenv-cloud-provider-fake"
-schemes = ["aws-sm", "aws-ssm"]
+schemes = ["aws-secrets", "aws-ssm"]
 description = "fake"
 "#;
 
@@ -69,7 +69,7 @@ fn write_index(dir: &Path, archive: &Path, sha: &str) -> std::path::PathBuf {
           "providers": {{
             "aws": {{
               "package": "dotenv-cloud-provider-fake",
-              "schemes": ["aws-sm", "aws-ssm"],
+              "schemes": ["aws-secrets", "aws-ssm"],
               "versions": {{
                 "0.1.0": {{ "targets": {{
                   "{TARGET}": {{ "url": "file://{archive}", "sha256": "{sha}" }}
@@ -180,7 +180,7 @@ fn write_signed_index(dir: &Path, archive: &Path, sha: &str, sig: &str) -> std::
           "providers": {{
             "aws": {{
               "package": "dotenv-cloud-provider-fake",
-              "schemes": ["aws-sm", "aws-ssm"],
+              "schemes": ["aws-secrets", "aws-ssm"],
               "versions": {{
                 "0.1.0": {{ "targets": {{
                   "{TARGET}": {{ "url": "file://{archive}", "sha256": "{sha}", "signature": "{sig}" }}
@@ -257,6 +257,69 @@ fn signed_install_rejects_bad_signature() {
         .unwrap();
     assert!(!out.status.success(), "bad signature must be rejected");
     assert!(String::from_utf8_lossy(&out.stderr).contains("signature verification failed"));
+}
+
+#[test]
+fn install_records_integrity_and_init_regenerates_lock() {
+    let reg = tempfile::tempdir().unwrap();
+    let (archive, sha) = build_archive(reg.path());
+    let index = write_index(reg.path(), &archive, &sha);
+    let index_url = format!("file://{}", url_path(&index));
+    let proj = tempfile::tempdir().unwrap();
+
+    // Install the fake provider.
+    let ok = bin()
+        .current_dir(proj.path())
+        .args([
+            "providers",
+            "install",
+            "aws",
+            "--registry",
+            &index_url,
+            "--allow-unsigned",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        ok.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ok.stderr)
+    );
+
+    // The installed manifest records the verified sha256.
+    let manifest = std::fs::read_to_string(
+        proj.path()
+            .join(".dotenv-cloud/providers/aws/manifest.toml"),
+    )
+    .unwrap();
+    assert!(
+        manifest.contains(&sha),
+        "installed manifest should record sha256: {manifest}"
+    );
+
+    // Deleting the lock and re-initializing regenerates it WITH sha + source,
+    // even though nothing is (re)installed.
+    let _ = std::fs::remove_file(proj.path().join("dotenv-cloud.lock"));
+    std::fs::write(proj.path().join(".env"), "X=aws-secrets://foo/bar\n").unwrap();
+    let out = bin()
+        .current_dir(proj.path())
+        .args(["--no-env-local", "init", "--yes", "--registry", &index_url])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let lock = std::fs::read_to_string(proj.path().join("dotenv-cloud.lock")).unwrap();
+    assert!(
+        lock.contains(&sha),
+        "regenerated lock must keep sha256: {lock}"
+    );
+    assert!(
+        lock.contains("source ="),
+        "regenerated lock must include source: {lock}"
+    );
 }
 
 #[test]

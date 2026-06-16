@@ -45,7 +45,7 @@ workflow, and an hourly schedule.
     "aws": {
       "package": "dotenv-cloud-provider-aws",
       "description": "AWS Secrets Manager and SSM Parameter Store",
-      "schemes": ["aws-sm", "aws-ssm"],
+      "schemes": ["aws-secrets", "aws-ssm"],
       "versions": {
         "0.1.0-beta.1": {
           "targets": {

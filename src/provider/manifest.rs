@@ -139,7 +139,7 @@ name = "dotenv-cloud-provider-aws"
 version = "1.0.0"
 protocol_version = "1"
 executable = "dotenv-cloud-provider-aws"
-schemes = ["aws-sm", "aws-ssm"]
+schemes = ["aws-secrets", "aws-ssm"]
 description = "AWS provider"
 
 [integrity]
@@ -147,7 +147,7 @@ sha256 = "abc"
 "#;
         let m = Manifest::parse(text).unwrap();
         assert_eq!(m.name, "dotenv-cloud-provider-aws");
-        assert_eq!(m.schemes, vec!["aws-sm", "aws-ssm"]);
+        assert_eq!(m.schemes, vec!["aws-secrets", "aws-ssm"]);
         assert_eq!(m.integrity.unwrap().sha256.as_deref(), Some("abc"));
     }
 }

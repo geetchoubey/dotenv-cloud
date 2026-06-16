@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="60.657 40.507 16 16" width="16px" height="16px">
+  <rect width="16" height="16" rx="3" x="60.657" y="40.507" style="fill-rule: nonzero; stroke: rgb(15, 23, 42); fill: none; paint-order: stroke; stroke-width: 0.2px;" transform="matrix(0.9999999999999999, 0, 0, 0.9999999999999999, 0, 0)"/>
+  <text textLength="12.4" lengthAdjust="spacingAndGlyphs" style="fill: rgb(15, 23, 42); font-family: Roboto, Arial, sans-serif; font-size: 6px; font-weight: 300; paint-order: fill; white-space: pre;" x="61.457" y="55.107" transform="matrix(0.9999999999999999, 0, 0, 0.9999999999999999, 0, 0)">.env</text>
+  <path d="M 73.827 55.613 L 74.327 54.613 L 74.827 55.613" fill="none" stroke="#fb923c" stroke-linecap="round" stroke-linejoin="round" style="stroke-width: 0.2px; transform-origin: 74.327px 55.113px;" id="path-0" transform="matrix(0.98480803, -0.17364803, 0.17364803, 0.98480803, 1.4e-7, -7.7e-7)"/>
+  <text transform="matrix(0.99619502, -0.08715601, 0.08715601, 0.99619502, 61.70876242, 41.82806308)" textLength="8" lengthAdjust="spacingAndGlyphs" style="fill: rgb(251, 146, 60); font-family: &quot;Padyakke Expanded One&quot;; font-size: 3px; font-weight: 700; text-anchor: middle; white-space: pre; transform-origin: 9.26786px 7.64917px;" x="9" y="8.2">cloud</text>
+</svg>

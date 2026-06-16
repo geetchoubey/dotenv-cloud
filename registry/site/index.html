@@ -3,11 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dotenv-cloud — dotenv with remote secret resolution</title>
-<meta name="description" content="A CLI that extends dotenv with secure, verifiable remote secret resolution via external provider plugins.">
+<title>dotenv-cloud — docs</title>
+<meta name="description" content="dotenv-cloud: extend dotenv with secure remote secret resolution via provider plugins. Install, configure, and reference.">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" href="./favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="./favicon-light.svg" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="./favicon-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <link rel="stylesheet" href="./style.css">
-<!-- Apply the saved theme before paint to avoid a flash. -->
 <script>
   (function () {
     try {
@@ -19,9 +23,14 @@
 </head>
 <body>
 
-<header class="bar">
-  <div class="wrap">
-    <a class="brand" href="#top">dotenv<span>-cloud</span></a>
+<header class="topbar">
+  <div class="inner">
+    <div class="bar-left">
+      <button class="icon-btn menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <a class="brand" href="#introduction">dotenv<span>-cloud</span></a>
+    </div>
     <div class="bar-right">
       <a class="btn secondary" href="https://github.com/geetchoubey/dotenv-cloud">GitHub</a>
       <button class="icon-btn theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle theme">
@@ -32,90 +41,107 @@
   </div>
 </header>
 
-<a id="top"></a>
-<div class="hero">
-  <div class="wrap">
-    <h1 class="logo">dotenv<span>-cloud</span></h1>
-    <p class="tagline">dotenv, extended with secure remote secret resolution.</p>
-    <div class="cta">
-      <a class="btn" href="#install">Install</a>
-      <a class="btn secondary" href="#start">Quick start</a>
-      <a class="btn secondary" href="./index.json">Registry index</a>
-    </div>
-    <nav class="toc">
-      <a href="#what">What it is</a>
-      <a href="#install">Install</a>
-      <a href="#start">Quick start</a>
-      <a href="#how">How it works</a>
-      <a href="#providers">Providers</a>
-      <a href="#security">Security</a>
-      <a href="./reference.html">Reference</a>
+<div class="backdrop"></div>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="nav-group">
+      <p class="nav-title">Documentation</p>
+      <a href="#introduction">Introduction</a>
       <a href="#faq">FAQ</a>
-    </nav>
-  </div>
-</div>
+    </div>
+    <div class="nav-group">
+      <p class="nav-title">Quickstart</p>
+      <a href="#quickstart-cli">CLI</a>
+      <a href="#config-basic">dotenv-cloud.toml</a>
+    </div>
+    <div class="nav-group">
+      <p class="nav-title">Reference</p>
+      <a href="#ref-cli">CLI</a>
+      <a href="#ref-providers">Providers</a>
+      <a href="#ref-config">Config TOML</a>
+    </div>
+  </aside>
 
-<main class="wrap">
+  <main class="content">
 
-<section id="what">
-  <h2>What is dotenv-cloud?</h2>
-  <p><strong>Keep your dotenv workflow exactly as it is — you don't change a
-  single line of code.</strong> Your app still reads plain environment variables
-  (<code>process.env</code>, <code>os.environ</code>, <code>System.getenv</code>,
-  …) and you still keep a <code>.env</code> file. The one difference: a value can
-  now be a <em>reference</em> to a secret in a remote vault instead of a
-  hard-coded plaintext secret.</p>
-  <p>dotenv-cloud resolves those references at run time, merges them with your
-  local values by clear precedence, and injects the result into your process —
-  the same way dotenv always has. There's no SDK to import and nothing to
-  rewrite: secrets stay in your vault, only references live in your repo.</p>
+  <!-- ============ Documentation / Introduction ============ -->
+  <section id="introduction">
+    <img class="hero-logo hero-logo-light" src="./favicon-light.svg" alt="dotenv-cloud logo" width="64" height="64">
+    <img class="hero-logo hero-logo-dark" src="./favicon-dark.svg" alt="dotenv-cloud logo" width="64" height="64">
+    <h2>Introduction</h2>
+    <p class="lead">dotenv, extended with secure remote secret resolution.</p>
+    <p>Keep your dotenv workflow exactly as it is — your app still reads plain
+    environment variables and you still keep a <code>.env</code> file. The one
+    difference: a value can be a <em>reference</em> to a secret in a remote vault
+    instead of a hard-coded plaintext secret. dotenv-cloud resolves those
+    references at run time, merges them with your local values by clear
+    precedence, and injects the result into your process. No SDK to import,
+    nothing to rewrite.</p>
 
-  <h3>Your application code stays the same</h3>
-  <div class="code"><pre><span class="d">// however you already read config — unchanged, no SDK</span>
-const dbPassword = process.env.<span class="c">DB_PASSWORD</span>;</pre></div>
+    <h3>Quick install</h3>
+    <div class="code"><pre><span class="d"># macOS / Linux (Homebrew)</span>
+brew install geetchoubey/tap/dotenv-cloud
 
-  <h3>Only the <code>.env</code> value changes — plaintext becomes a reference</h3>
-  <div class="code"><pre><span class="d"># before — a secret committed in plaintext</span>
-DB_PASSWORD=super-secret-value
+<span class="d"># macOS / Linux (script)</span>
+curl -fsSL https://geetchoubey.github.io/dotenv-cloud/install.sh | sh
 
-<span class="d"># after — a reference; the real secret never leaves your vault</span>
-DB_PASSWORD=<span class="c">aws-secrets://prod/billing/db#password</span>
-API_TOKEN=<span class="c">aws-ssm://prod/billing/api_token</span></pre></div>
+<span class="d"># Windows (PowerShell)</span>
+irm https://geetchoubey.github.io/dotenv-cloud/install.ps1 | iex</pre></div>
+    <p class="muted">Scripts auto-detect your platform, verify the SHA-256, and
+    set up tab-completion. Verify with <code>dotenv-cloud --version</code>.</p>
 
-  <h3>Launch through dotenv-cloud and everything resolves</h3>
-  <div class="code"><pre><span class="d"># your usual command, just prefixed</span>
+    <h3>A sample <code>.env</code></h3>
+    <div class="code"><pre>APP_NAME=billing
+DB_PASSWORD=<span class="c">aws-secrets://prod/billing/db#password</span>   <span class="d"># AWS Secrets Manager</span>
+API_TOKEN=<span class="c">aws-ssm:///prod/billing/api_token</span>        <span class="d"># SSM (three slashes)</span>
+SESSION_KEY=<span class="c">vault://secret/billing#session_key</span>      <span class="d"># HashiCorp Vault</span></pre></div>
+
+    <h3>Run your app</h3>
+    <div class="code"><pre><span class="d"># resolve references and exec, with the merged environment</span>
 dotenv-cloud run -- node server.js</pre></div>
-  <p class="muted">Plain values in <code>.env</code> are passed straight through,
-  so you can adopt it gradually — turn one secret into a reference at a time.</p>
-</section>
+  </section>
 
-<section id="install">
-  <h2>Install</h2>
+  <!-- ============ Documentation / FAQ ============ -->
+  <section id="faq">
+    <h2>FAQ</h2>
+    <details>
+      <summary>How is this different from a normal dotenv loader?</summary>
+      <p>A normal loader reads literal values. dotenv-cloud additionally treats
+      <code>scheme://…</code> values as references and resolves them from a remote
+      store at run time, so production secrets never sit in your repo.</p>
+    </details>
+    <details>
+      <summary>Where do the secrets come from?</summary>
+      <p>From the provider backing the scheme — today AWS Secrets Manager,
+      AWS SSM Parameter Store, and HashiCorp Vault. Authentication uses your
+      existing environment (AWS chain / <code>VAULT_TOKEN</code>); credentials are
+      never stored.</p>
+    </details>
+    <details>
+      <summary>Do I have to trust the registry?</summary>
+      <p>You trust the signing <em>key</em>, not the index. The CLI ships with the
+      project's public key and verifies every provider's ed25519 signature against
+      it. A tampered index can't make it install an artifact that isn't signed by
+      the trusted key.</p>
+    </details>
+    <details>
+      <summary>Will macOS or Windows flag the download?</summary>
+      <p>Linux: no. macOS via Homebrew: no. macOS via script/manual: clear the
+      quarantine flag if Gatekeeper complains (the script does this for you).
+      Windows: binaries aren't Authenticode-signed yet, so SmartScreen may warn —
+      cosmetic; choose "Run anyway".</p>
+    </details>
+    <details>
+      <summary>How do I pin a version?</summary>
+      <p>CLI: <code>DOTENV_CLOUD_VERSION=v0.1.1</code> before the install script.
+      Provider: <code>dotenv-cloud providers install aws@0.1.0</code>.</p>
+    </details>
+  </section>
 
-  <h3>Homebrew <span class="muted">(macOS &amp; Linux)</span></h3>
-  <div class="code"><pre>brew install geetchoubey/tap/dotenv-cloud</pre></div>
-
-  <h3>macOS &amp; Linux <span class="muted">(script)</span></h3>
-  <div class="code"><pre>curl -fsSL https://geetchoubey.github.io/dotenv-cloud/install.sh | sh</pre></div>
-
-  <h3>Windows <span class="muted">(PowerShell)</span></h3>
-  <div class="code"><pre>irm https://geetchoubey.github.io/dotenv-cloud/install.ps1 | iex</pre></div>
-
-  <p class="muted">The scripts auto-detect your platform, download the matching
-  release, and verify its SHA-256 before installing. Pin a version with
-  <code>DOTENV_CLOUD_VERSION=v0.1.0-beta.3</code>, or choose a directory with
-  <code>DOTENV_CLOUD_BIN_DIR</code>. Prefer to read first?
-  <a href="./install.sh">install.sh</a> · <a href="./install.ps1">install.ps1</a>.</p>
-
-  <h3>Manual</h3>
-  <p>Grab a prebuilt archive from the
-  <a href="https://github.com/geetchoubey/dotenv-cloud/releases">releases page</a>,
-  verify the <code>.sha256</code>, extract, and put <code>dotenv-cloud</code> on your <code>PATH</code>.</p>
-</section>
-
-<section id="start">
-  <h2>Quick start</h2>
-  <div class="code"><pre><span class="d"># 1. detect remote references and install needed providers</span>
+  <!-- ============ Quickstart / CLI ============ -->
+  <section id="quickstart-cli">
+    <h2>Quickstart — CLI</h2>
+    <div class="code"><pre><span class="d"># 1. detect remote references and install needed providers</span>
 dotenv-cloud init --yes
 
 <span class="d"># 2. check everything resolves (no secrets printed)</span>
@@ -123,153 +149,225 @@ dotenv-cloud validate --providers
 
 <span class="d"># 3. run your app with the merged, resolved environment</span>
 dotenv-cloud run -- ./start.sh</pre></div>
-  <div class="grid">
-    <div class="card"><h3>run</h3><p class="muted">Resolve and exec a child process.</p></div>
-    <div class="card"><h3>export</h3><p class="muted">Print shell-ready <code>export</code> lines.</p></div>
-    <div class="card"><h3>build</h3><p class="muted">Materialize values to a file.</p></div>
-    <div class="card"><h3>resolve</h3><p class="muted">Inspect one key (redacted).</p></div>
-    <div class="card"><h3>validate</h3><p class="muted">Check config &amp; providers.</p></div>
-    <div class="card"><h3>doctor</h3><p class="muted">Diagnose your setup.</p></div>
-  </div>
-</section>
+    <div class="grid">
+      <div class="card"><h3>run</h3><p class="muted">Resolve and exec a child process.</p></div>
+      <div class="card"><h3>export</h3><p class="muted">Print shell <code>export</code> lines.</p></div>
+      <div class="card"><h3>build</h3><p class="muted">Materialize values to a file.</p></div>
+      <div class="card"><h3>resolve</h3><p class="muted">Inspect one key (redacted).</p></div>
+      <div class="card"><h3>validate</h3><p class="muted">Check config &amp; providers.</p></div>
+      <div class="card"><h3>doctor</h3><p class="muted">Diagnose your setup.</p></div>
+    </div>
+  </section>
 
-<section id="how">
-  <h2>How it works</h2>
-  <h3>Reference syntax</h3>
-  <p>Any value may be a URI reference. The scheme selects the provider:</p>
-  <div class="code"><pre>aws-secrets://<span class="d">path/to/secret</span>#<span class="d">field</span>            <span class="d"># AWS Secrets Manager (optional JSON field)</span>
-aws-ssm://<span class="d">path/to/parameter</span>           <span class="d"># AWS SSM Parameter Store</span>
-vault://<span class="d">mount/path</span>#<span class="d">field</span>               <span class="d"># HashiCorp Vault KV (v1/v2)</span></pre></div>
-  <h3>Precedence</h3>
-  <p>Sources merge in a defined order (highest wins). The default is:</p>
-  <div class="code"><pre>cli  &gt;  system env  &gt;  remote  &gt;  .env.local  &gt;  .env  &gt;  defaults</pre></div>
-  <p class="muted">Configurable per project; <code>validate</code> warns about risky orderings.</p>
-  <h3>Configuration</h3>
-  <div class="code"><pre><span class="d"># dotenv-cloud.toml</span>
-default_profile = "dev"
+  <!-- ============ Quickstart / config ============ -->
+  <section id="config-basic">
+    <h2>Quickstart — <code>dotenv-cloud.toml</code></h2>
+    <p>Place it at the project root (discovered by walking up from the cwd). It's
+    shared project config with no secrets — commit it.</p>
+    <div class="code"><pre>default_profile = "dev"
 
-[profile.prod]
-env_file = ".env.production"
+[profile.dev]
+env_file = ".env"
 
 [providers.aws]
 region = "us-east-1"
 
 [provider_registry]
 url = "https://geetchoubey.github.io/dotenv-cloud/index.json"</pre></div>
-</section>
+    <h3>What to commit</h3>
+    <table>
+      <tr><th>File</th><th>Commit?</th><th>Why</th></tr>
+      <tr><td><code>dotenv-cloud.toml</code></td><td>Yes</td><td>Shared config, no secrets.</td></tr>
+      <tr><td><code>.env</code> (references)</td><td>Yes</td><td>References aren't secrets.</td></tr>
+      <tr><td><code>dotenv-cloud.lock</code></td><td>Yes</td><td>Pins provider versions + sha256.</td></tr>
+      <tr><td><code>.env.local</code></td><td>No</td><td>Per-developer overrides / local secrets.</td></tr>
+      <tr><td><code>build</code>/<code>export</code> output</td><td>No</td><td>Contains resolved real secrets.</td></tr>
+    </table>
+  </section>
 
-<section id="providers">
-  <h2>Providers</h2>
-  <p>Providers are standalone plugins distributed through this registry. The CLI
-  downloads, verifies, and installs them on demand.</p>
-  <div class="code"><pre>dotenv-cloud providers search                <span class="d"># list available providers</span>
-dotenv-cloud providers install aws           <span class="d"># latest; or aws@0.1.0-beta.3 to pin</span>
-dotenv-cloud providers list                  <span class="d"># what's installed</span>
-dotenv-cloud providers update                <span class="d"># update all</span></pre></div>
-  <table>
-    <tr><th>Provider</th><th>Schemes</th><th>Backend</th></tr>
-    <tr><td><code>aws</code></td><td><code>aws-secrets</code>, <code>aws-ssm</code></td><td>AWS Secrets Manager &amp; SSM Parameter Store</td></tr>
-    <tr><td><code>vault</code></td><td><code>vault</code></td><td>HashiCorp Vault KV (v1/v2), token auth</td></tr>
-  </table>
-  <p class="muted">AWS credentials are read from your environment exactly like the
-  AWS CLI/SDK (env vars, shared config, IAM roles). dotenv-cloud never stores them.</p>
-</section>
+  <!-- ============ Reference / CLI ============ -->
+  <section id="ref-cli">
+    <h2>Reference — CLI</h2>
 
-<section id="security">
-  <h2>Security &amp; verification</h2>
-  <ul>
-    <li><strong>Integrity:</strong> every downloaded archive is checked against a
-      published <strong>SHA-256</strong> digest. A mismatch aborts the install.</li>
-    <li><strong>Authenticity:</strong> provider artifacts are signed with
-      <strong>ed25519</strong>. The CLI verifies each signature against a
-      <strong>built-in trusted key by default</strong> — no configuration needed.
-      Installing an unsigned artifact requires an explicit <code>--allow-unsigned</code>.</li>
-    <li><strong>Least exposure:</strong> resolved secret values are redacted in
-      diagnostics and never written to disk unless you explicitly run
-      <code>build</code>/<code>export</code>.</li>
-  </ul>
-  <p class="muted">This index records each artifact's URL, SHA-256, and ed25519
-  signature. Artifacts are distributed as GitHub Release assets.</p>
-</section>
+    <h3>Global flags</h3>
+    <p class="muted">Precede the subcommand, e.g. <code>dotenv-cloud --profile prod run -- ./app</code>.</p>
+    <table>
+      <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
+      <tr><td><code>--config</code></td><td>path</td><td>Explicit config file (skips discovery).</td></tr>
+      <tr><td><code>--profile</code></td><td>name</td><td>Select a named profile.</td></tr>
+      <tr><td><code>--env-file</code> / <code>--env-local-file</code></td><td>path</td><td>Override the profile's file paths.</td></tr>
+      <tr><td><code>--no-env-file</code> / <code>--no-env-local</code></td><td>—</td><td>Skip loading those files.</td></tr>
+      <tr><td><code>--set</code></td><td>KEY=VALUE</td><td>Override at CLI precedence. Repeatable.</td></tr>
+      <tr><td><code>--strict</code></td><td>—</td><td>Treat warnings as errors.</td></tr>
+      <tr><td><code>--timeout</code></td><td>duration</td><td>Provider timeout (<code>2s</code>, <code>500ms</code>). Default 2s.</td></tr>
+      <tr><td><code>--no-color</code> / <code>--verbose</code> / <code>--quiet</code></td><td>—</td><td>Output controls.</td></tr>
+    </table>
 
-<section id="faq">
-  <h2>FAQ</h2>
+    <h3>Commands</h3>
+    <table>
+      <tr><th>Command</th><th>Key flags</th><th>What it does</th></tr>
+      <tr><td><code>init</code></td><td><code>--yes --upgrade --offline --project --user --registry --lockfile</code></td><td>Detect schemes, install providers, write the lockfile.</td></tr>
+      <tr><td><code>run -- &lt;cmd&gt;</code></td><td><code>--clear-env --preserve --require --dry-run --redact-summary --install-missing-providers</code></td><td>Resolve and exec a child with the merged env.</td></tr>
+      <tr><td><code>export</code></td><td><code>--shell --include --exclude --no-comments</code></td><td>Print shell assignments for the project env.</td></tr>
+      <tr><td><code>build</code></td><td><code>--mode dotenv|json --output --force --chmod --include --exclude</code></td><td>Materialize the project env to a file/stdout.</td></tr>
+      <tr><td><code>resolve &lt;key&gt;</code></td><td><code>--show --json --source</code></td><td>Resolve and print one key (redacted by default).</td></tr>
+      <tr><td><code>validate</code></td><td><code>--providers --no-providers --all-profiles --json</code></td><td>Check config, references, provider connectivity.</td></tr>
+      <tr><td><code>doctor</code></td><td>—</td><td>Diagnose setup, credentials, installed providers.</td></tr>
+      <tr><td><code>providers</code></td><td><code>list · search · install · update · info · remove</code></td><td>Manage installed provider plugins.</td></tr>
+      <tr><td><code>completions &lt;shell&gt;</code></td><td>—</td><td>Print a completion script (bash/zsh/fish/powershell/elvish).</td></tr>
+    </table>
 
-  <details>
-    <summary>How is this different from a normal dotenv loader?</summary>
-    <p>A normal loader reads literal values from <code>.env</code>. dotenv-cloud
-    additionally treats <code>scheme://…</code> values as references and resolves
-    them from a remote secret store at run time, so production secrets never need
-    to sit in your repository or <code>.env</code> files.</p>
-  </details>
+    <h3>providers subcommands</h3>
+    <div class="code"><pre>dotenv-cloud providers install aws        <span class="d"># latest; aws@0.1.0 to pin</span>
+dotenv-cloud providers list               <span class="d"># installed</span>
+dotenv-cloud providers update [name]      <span class="d"># one or all</span>
+dotenv-cloud providers info &lt;name&gt;         <span class="d"># metadata + integrity</span></pre></div>
+    <p class="muted">Shared flags: <code>--registry &lt;url&gt;</code>,
+    <code>--project</code>/<code>--user</code> (scope), <code>--allow-unsigned</code>,
+    <code>--yes</code>.</p>
 
-  <details>
-    <summary>Where do the secrets actually come from?</summary>
-    <p>From whichever provider backs the scheme. Today that's AWS Secrets Manager
-    (<code>aws-secrets</code>) and SSM Parameter Store (<code>aws-ssm</code>). Authentication
-    uses your existing AWS environment — the same credentials the AWS CLI would use.</p>
-  </details>
+    <h3>Environment variables</h3>
+    <table>
+      <tr><th>Variable</th><th>Used by</th><th>Description</th></tr>
+      <tr><td><code>DOTENV_CLOUD_CONFIG</code></td><td>all</td><td>Path to a config file; skips discovery.</td></tr>
+      <tr><td><code>DOTENV_CLOUD_PROFILE</code></td><td>all</td><td>Active profile (beaten by <code>--profile</code>).</td></tr>
+      <tr><td><code>DOTENV_CLOUD_VERSION</code> / <code>_BIN_DIR</code> / <code>_TARGET</code></td><td>install script</td><td>Version / install dir / forced target.</td></tr>
+      <tr><td><code>DOTENV_CLOUD_NO_COMPLETIONS</code></td><td>install script</td><td>Skip wiring shell completions.</td></tr>
+    </table>
+  </section>
 
-  <details>
-    <summary>Will macOS or Windows flag the download?</summary>
-    <p><strong>Linux:</strong> no — there's no OS gate.
-    <strong>macOS via Homebrew:</strong> no — brew doesn't quarantine its
-    downloads. <strong>macOS via the script or a manual download:</strong> if
-    Gatekeeper complains about an "unidentified developer," clear the quarantine
-    flag (the install script does this for you):</p>
-    <div class="code"><pre>xattr -d com.apple.quarantine /path/to/dotenv-cloud</pre></div>
-    <p><strong>Windows:</strong> the binaries aren't yet code-signed with an
-    Authenticode certificate, so SmartScreen or Defender may warn that the
-    publisher is unverified — especially if you launch the <code>.exe</code> from
-    Explorer. This is cosmetic; choose "More info → Run anyway," or run it from a
-    terminal. (The downloads are still SHA-256 verified by the installer.)</p>
-  </details>
+  <!-- ============ Reference / Providers ============ -->
+  <section id="ref-providers">
+    <h2>Reference — Providers</h2>
+    <table>
+      <tr><th>Provider</th><th>Schemes</th><th>Backend</th></tr>
+      <tr><td><code>aws</code></td><td><code>aws-secrets</code>, <code>aws-ssm</code></td><td>AWS Secrets Manager &amp; SSM Parameter Store</td></tr>
+      <tr><td><code>vault</code></td><td><code>vault</code></td><td>HashiCorp Vault KV (v1/v2), token auth</td></tr>
+    </table>
 
-  <details>
-    <summary>Do I have to trust this registry?</summary>
-    <p>You trust the <em>signing key</em>, not the index. The CLI ships with the
-    project's public key built in and verifies every provider signature against
-    it. A tampered index can't make the CLI install an artifact that isn't signed
-    by the trusted key.</p>
-  </details>
+    <h3>AWS</h3>
+    <div class="code"><pre><span class="d"># Secrets Manager</span>
+DB_PASSWORD=aws-secrets://prod/db/password
+API_KEY=aws-secrets://prod/app/config<span class="c">#api_key</span>          <span class="d"># JSON field</span>
+DB_PASSWORD=aws-secrets://prod/db/password?version_stage=AWSCURRENT
+CERT=aws-secrets://prod/cert?binary=base64           <span class="d"># binary must opt in</span>
 
-  <details>
-    <summary>How do I pin or roll back a version?</summary>
-    <p>For the CLI: <code>DOTENV_CLOUD_VERSION=v0.1.0-beta.3</code> before the install
-    command. For a provider: <code>dotenv-cloud providers install aws@0.1.0-beta.3</code>.</p>
-  </details>
+<span class="d"># SSM — parameter names are ABSOLUTE paths => three slashes</span>
+API_TOKEN=aws-ssm:///prod/app/api_token?with_decryption=true</pre></div>
+    <p class="muted">Auth: the AWS default credential chain (env, shared config,
+    SSO, IAM roles). <code>region</code>/<code>profile</code> via
+    <code>[providers.aws]</code> — but prefer <code>AWS_PROFILE</code> over
+    committing a profile (see the note below).</p>
 
-  <details>
-    <summary>Can I use my own private registry or provider?</summary>
-    <p>Yes. Point <code>[provider_registry].url</code> at your own
-    <code>index.json</code> (any <code>https://</code>, <code>file://</code>, or local
-    path), and add your signing key via <code>[provider_registry].public_key</code>
-    to have it trusted alongside the built-in key.</p>
-  </details>
+    <h3>HashiCorp Vault</h3>
+    <div class="code"><pre>DB_PASSWORD=vault://secret/app<span class="c">#password</span>       <span class="d"># KV v2: reads secret/data/app</span>
+WHOLE=vault://secret/app                       <span class="d"># no #field -> whole JSON object</span>
+PINNED=vault://secret/app?version=3<span class="c">#password</span>   <span class="d"># KV v2 specific version</span></pre></div>
+    <p class="muted">KV v2 (default) auto-inserts the <code>data/</code> segment;
+    KV v1 uses the path verbatim (set
+    <code>[providers.vault.kv].default_version</code>). Auth: token from
+    <code>VAULT_TOKEN</code>, address from <code>VAULT_ADDR</code>; TLS via
+    <code>VAULT_CACERT</code> / <code>VAULT_SKIP_VERIFY</code>.</p>
 
-  <details>
-    <summary>Does <code>providers install</code> work on Windows?</summary>
-    <p>The Windows CLI itself works. Automated provider installation currently
-    targets macOS and Linux (the registry indexes <code>.tar.gz</code> builds); Windows
-    provider support is planned.</p>
-  </details>
-</section>
+    <h3>Security &amp; verification</h3>
+    <p>Every downloaded archive is checked against a published <strong>SHA-256</strong>
+    and an <strong>ed25519 signature</strong> verified against the CLI's built-in
+    trusted key (on by default; <code>--allow-unsigned</code> opts out). Resolved
+    values are redacted in diagnostics and never written to disk unless you run
+    <code>build</code>/<code>export</code>.</p>
 
-</main>
+    <div class="note"><strong>Pitfalls.</strong>
+    SSM needs <em>three</em> slashes (<code>aws-ssm:///path</code>) — the name is
+    absolute. Don't commit <code>[providers.aws].profile</code> (it overrides
+    <code>AWS_PROFILE</code>); let each developer set the env var.
+    <code>export</code>/<code>build</code> output holds real secrets — gitignore it.
+    A missing remote with <code>resolution.missing = warn/ignore</code> is
+    <em>skipped</em>, not replaced by <code>[defaults]</code>.</div>
+  </section>
 
-<footer>
-  <div class="wrap">
-    <p>
-      <a href="./reference.html">Reference</a> ·
+  <!-- ============ Reference / Config TOML ============ -->
+  <section id="ref-config">
+    <h2>Reference — Config TOML</h2>
+    <p>TOML, discovered as <code>dotenv-cloud.toml</code> by walking up from the
+    cwd. Unknown keys are rejected (typos surface in <code>validate</code>) except
+    the free-form <code>[providers.*]</code> tables. Every section is optional.</p>
+
+    <h3>Sections &amp; keys</h3>
+    <table>
+      <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+      <tr><td><code>default_profile</code></td><td><code>"dev"</code></td><td>Profile when none is selected.</td></tr>
+      <tr><td><code>[profile.&lt;name&gt;]</code> · <code>env_file</code> / <code>env_local_file</code></td><td><code>.env</code> / <code>.env.local</code></td><td>Dotenv files per profile.</td></tr>
+      <tr><td><code>[defaults]</code></td><td><code>{}</code></td><td>Lowest-precedence fallbacks for absent keys.</td></tr>
+      <tr><td><code>[precedence].order</code></td><td><code>cli,system,remote,env.local,env,defaults</code></td><td>Highest first; no duplicates.</td></tr>
+      <tr><td><code>[providers.aws]</code> / <code>[providers.vault]</code></td><td>—</td><td>Free-form, passed to the plugin.</td></tr>
+      <tr><td><code>[provider_registry].url</code></td><td>public</td><td>Registry index URL.</td></tr>
+      <tr><td><code>[provider_registry].allow_unsigned</code></td><td><code>false</code></td><td>Permit unsigned installs.</td></tr>
+      <tr><td><code>[provider_registry].public_key</code></td><td>—</td><td>Extra trusted ed25519 key (custom registry).</td></tr>
+      <tr><td><code>[resolution].missing</code></td><td><code>"error"</code></td><td><code>error</code> / <code>warn</code> / <code>ignore</code>.</td></tr>
+      <tr><td><code>[resolution].concurrency</code></td><td><code>8</code></td><td>Max concurrent resolutions.</td></tr>
+      <tr><td><code>[conflicts]</code></td><td>—</td><td><code>warn_on_any_shadow</code>, <code>error_on_shadow=[…]</code>.</td></tr>
+      <tr><td><code>[sensitive]</code></td><td>—</td><td><code>keys=[…]</code>, <code>patterns=[…]</code> to redact.</td></tr>
+    </table>
+
+    <h3>Precedence sources</h3>
+    <p class="muted"><code>cli</code> (from <code>--set</code>) ·
+    <code>system</code> (process env) · <code>remote</code> (resolved references) ·
+    <code>env.local</code> · <code>env</code> · <code>defaults</code>. By default
+    <code>system</code> outranks <code>.env</code>, and <code>remote</code>
+    outranks <code>defaults</code>.</p>
+
+    <h3>Full annotated example</h3>
+    <div class="code"><pre>default_profile = "dev"
+
+[profile.dev]
+env_file = ".env"
+env_local_file = ".env.local"
+
+[profile.prod]
+env_file = ".env.production"
+
+[defaults]
+LOG_LEVEL = "info"
+
+[precedence]
+order = ["cli", "system", "remote", "env.local", "env", "defaults"]
+
+[providers.aws]
+region = "us-east-1"          <span class="d"># profile omitted on purpose — use AWS_PROFILE</span>
+
+[providers.vault]
+address = "https://vault.example.com"
+[providers.vault.kv]
+default_version = "v2"
+
+[provider_registry]
+url = "https://geetchoubey.github.io/dotenv-cloud/index.json"
+allow_unsigned = false
+
+[resolution]
+missing = "error"             <span class="d"># error | warn | ignore</span>
+concurrency = 8
+
+[conflicts]
+warn_on_any_shadow = false
+error_on_shadow = []
+
+[sensitive]
+keys = ["DB_PASSWORD", "API_KEY"]
+patterns = ["*_TOKEN", "*_SECRET"]</pre></div>
+
+    <footer>
       <a href="https://github.com/geetchoubey/dotenv-cloud">Core</a> ·
       <a href="https://github.com/geetchoubey/dotenv-cloud-provider-aws">AWS provider</a> ·
+      <a href="https://github.com/geetchoubey/dotenv-cloud-provider-vault">Vault provider</a> ·
       <a href="https://github.com/geetchoubey/homebrew-tap">Homebrew tap</a> ·
-      <a href="./index.json">index.json</a> ·
-      <a href="https://github.com/geetchoubey/dotenv-cloud/releases">Releases</a>
-    </p>
-    <p class="muted">MIT OR Apache-2.0 · Secrets stay in your vault.</p>
-  </div>
-</footer>
+      <a href="./index.json">index.json</a>
+      <br>MIT OR Apache-2.0 · Secrets stay in your vault.
+    </footer>
+  </section>
+
+  </main>
+</div>
 
 <script src="./app.js" defer></script>
 </body>

@@ -20,6 +20,28 @@
     });
   }
 
+  // ---- Mobile menu: slide-in sidebar toggled by the hamburger ----
+  var menuToggle = document.querySelector(".menu-toggle");
+  var backdrop = document.querySelector(".backdrop");
+  function setMenu(open) {
+    if (open) root.setAttribute("data-menu", "open");
+    else root.removeAttribute("data-menu");
+    if (menuToggle) menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  if (menuToggle) {
+    menuToggle.addEventListener("click", function () {
+      setMenu(root.getAttribute("data-menu") !== "open");
+    });
+  }
+  if (backdrop) backdrop.addEventListener("click", function () { setMenu(false); });
+  // Tapping a nav link navigates and closes the drawer.
+  document.querySelectorAll(".sidebar a").forEach(function (a) {
+    a.addEventListener("click", function () { setMenu(false); });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") setMenu(false);
+  });
+
   // ---- Copy-to-clipboard buttons on code blocks ----
   document.querySelectorAll(".code").forEach(function (block) {
     var pre = block.querySelector("pre");
@@ -45,7 +67,7 @@
   // ---- Active section highlight in the table of contents (scrollspy) ----
   // Only same-page (#anchor) links participate; cross-page links (e.g. the
   // Reference link) are left alone.
-  var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a"));
+  var links = Array.prototype.slice.call(document.querySelectorAll(".sidebar a"));
   var pairs = links
     .filter(function (a) {
       return (a.getAttribute("href") || "").charAt(0) === "#";

@@ -921,6 +921,20 @@ fn providers_remove(ctx: &Ctx, a: ProvidersTargetArgs) -> CliResult<i32> {
 }
 
 // ---------------------------------------------------------------------------
+// completions
+// ---------------------------------------------------------------------------
+
+/// Print a shell completion script to stdout. Users eval it (e.g.
+/// `eval "$(dotenv-cloud completions zsh)"`), or it's installed by the package.
+pub fn completions(args: CompletionsArgs) -> CliResult<i32> {
+    use clap::CommandFactory;
+    let mut cmd = crate::cli::Cli::command();
+    let name = cmd.get_name().to_string();
+    clap_complete::generate(args.shell, &mut cmd, name, &mut std::io::stdout());
+    Ok(0)
+}
+
+// ---------------------------------------------------------------------------
 // keygen / sign (maintainer + CI signing tools)
 // ---------------------------------------------------------------------------
 

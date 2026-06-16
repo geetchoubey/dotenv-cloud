@@ -122,6 +122,34 @@ fi
 
 info "Installed to $BIN_DIR/$BIN"
 
+# Wire up shell tab-completion, if this build supports it and the user's shell
+# can use it. Set DOTENV_CLOUD_NO_COMPLETIONS=1 to skip.
+setup_completions() {
+  [ -n "${DOTENV_CLOUD_NO_COMPLETIONS:-}" ] && return 0
+  # Only proceed if the installed binary actually has the subcommand.
+  "$BIN_DIR/$BIN" completions bash >/dev/null 2>&1 || return 0
+
+  exe="$BIN_DIR/$BIN"
+  case "$(basename "${SHELL:-}")" in
+    bash) rc="$HOME/.bashrc"; gen="bash" ;;
+    zsh)  rc="$HOME/.zshrc";  gen="zsh"  ;;
+    fish)
+      dir="$HOME/.config/fish/completions"
+      mkdir -p "$dir" && "$exe" completions fish > "$dir/$BIN.fish" 2>/dev/null \
+        && info "Installed fish completions to $dir/$BIN.fish"
+      return 0 ;;
+    *) return 0 ;;  # sh/dash and unknown shells: no programmable completion
+  esac
+
+  line="eval \"\$(\"$exe\" completions $gen)\""
+  if [ -f "$rc" ] && grep -qF "$BIN completions $gen" "$rc"; then
+    return 0  # already configured
+  fi
+  printf '\n# dotenv-cloud shell completions\n%s\n' "$line" >> "$rc" \
+    && info "Enabled $gen completions in $rc (restart your shell or: source $rc)"
+}
+setup_completions
+
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *)

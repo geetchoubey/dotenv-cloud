@@ -138,6 +138,8 @@ pub enum Command {
     Doctor,
     /// Manage externally installed provider plugins.
     Providers(ProvidersArgs),
+    /// Print a shell completion script (bash, zsh, fish, powershell, elvish).
+    Completions(CompletionsArgs),
     /// Generate an ed25519 release signing keypair (maintainer tool).
     #[command(hide = true)]
     Keygen,
@@ -145,6 +147,12 @@ pub enum Command {
     /// (maintainer/CI tool).
     #[command(hide = true)]
     Sign(SignArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CompletionsArgs {
+    /// Shell to generate completions for.
+    pub shell: clap_complete::Shell,
 }
 
 #[derive(Debug, Args)]

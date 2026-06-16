@@ -33,6 +33,7 @@ class DotenvCloud < Formula
 
   def install
     bin.install "dotenv-cloud"
+    generate_completions_from_executable(bin/"dotenv-cloud", "completions")
   end
 
   test do

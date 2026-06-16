@@ -8,6 +8,14 @@
       "bin_prefix": "dotenv-cloud-provider-aws",
       "schemes": ["aws-secrets", "aws-ssm"],
       "description": "AWS Secrets Manager and SSM Parameter Store provider for dotenv-cloud"
+    },
+    {
+      "name": "vault",
+      "repo": "geetchoubey/dotenv-cloud-provider-vault",
+      "package": "dotenv-cloud-provider-vault",
+      "bin_prefix": "dotenv-cloud-provider-vault",
+      "schemes": ["vault"],
+      "description": "HashiCorp Vault provider for dotenv-cloud"
     }
   ]
 }

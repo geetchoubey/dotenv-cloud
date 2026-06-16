@@ -138,7 +138,8 @@ dotenv-cloud run -- ./start.sh</pre></div>
   <h3>Reference syntax</h3>
   <p>Any value may be a URI reference. The scheme selects the provider:</p>
   <div class="code"><pre>aws-secrets://<span class="d">path/to/secret</span>#<span class="d">field</span>            <span class="d"># AWS Secrets Manager (optional JSON field)</span>
-aws-ssm://<span class="d">path/to/parameter</span>           <span class="d"># AWS SSM Parameter Store</span></pre></div>
+aws-ssm://<span class="d">path/to/parameter</span>           <span class="d"># AWS SSM Parameter Store</span>
+vault://<span class="d">mount/path</span>#<span class="d">field</span>               <span class="d"># HashiCorp Vault KV (v1/v2)</span></pre></div>
   <h3>Precedence</h3>
   <p>Sources merge in a defined order (highest wins). The default is:</p>
   <div class="code"><pre>cli  &gt;  system env  &gt;  remote  &gt;  .env.local  &gt;  .env  &gt;  defaults</pre></div>
@@ -168,6 +169,7 @@ dotenv-cloud providers update                <span class="d"># update all</span>
   <table>
     <tr><th>Provider</th><th>Schemes</th><th>Backend</th></tr>
     <tr><td><code>aws</code></td><td><code>aws-secrets</code>, <code>aws-ssm</code></td><td>AWS Secrets Manager &amp; SSM Parameter Store</td></tr>
+    <tr><td><code>vault</code></td><td><code>vault</code></td><td>HashiCorp Vault KV (v1/v2), token auth</td></tr>
   </table>
   <p class="muted">AWS credentials are read from your environment exactly like the
   AWS CLI/SDK (env vars, shared config, IAM roles). dotenv-cloud never stores them.</p>

@@ -164,9 +164,9 @@ dotenv-cloud run -- ./start.sh</pre></div>
     <h2>Quickstart — <code>dotenv-cloud.toml</code></h2>
     <p>Place it at the project root (discovered by walking up from the cwd). It's
     shared project config with no secrets — commit it.</p>
-    <div class="code"><pre>default_profile = "dev"
+    <div class="code"><pre>default_environment = "dev"
 
-[profile.dev]
+[environment.dev]
 env_file = ".env"
 
 [providers.aws]
@@ -190,12 +190,12 @@ url = "https://geetchoubey.github.io/dotenv-cloud/index.json"</pre></div>
     <h2>Reference — CLI</h2>
 
     <h3>Global flags</h3>
-    <p class="muted">Precede the subcommand, e.g. <code>dotenv-cloud --profile prod run -- ./app</code>.</p>
+    <p class="muted">Precede the subcommand, e.g. <code>dotenv-cloud --environment prod run -- ./app</code>.</p>
     <table>
       <tr><th>Flag</th><th>Arg</th><th>Description</th></tr>
       <tr><td><code>--config</code></td><td>path</td><td>Explicit config file (skips discovery).</td></tr>
-      <tr><td><code>--profile</code></td><td>name</td><td>Select a named profile.</td></tr>
-      <tr><td><code>--env-file</code> / <code>--env-local-file</code></td><td>path</td><td>Override the profile's file paths.</td></tr>
+      <tr><td><code>--environment</code></td><td>name</td><td>Select a named environment.</td></tr>
+      <tr><td><code>--env-file</code> / <code>--env-local-file</code></td><td>path</td><td>Override the environment's file paths.</td></tr>
       <tr><td><code>--no-env-file</code> / <code>--no-env-local</code></td><td>—</td><td>Skip loading those files.</td></tr>
       <tr><td><code>--set</code></td><td>KEY=VALUE</td><td>Override at CLI precedence. Repeatable.</td></tr>
       <tr><td><code>--strict</code></td><td>—</td><td>Treat warnings as errors.</td></tr>
@@ -211,7 +211,7 @@ url = "https://geetchoubey.github.io/dotenv-cloud/index.json"</pre></div>
       <tr><td><code>export</code></td><td><code>--shell --include --exclude --no-comments</code></td><td>Print shell assignments for the project env.</td></tr>
       <tr><td><code>build</code></td><td><code>--mode dotenv|json --output --force --chmod --include --exclude</code></td><td>Materialize the project env to a file/stdout.</td></tr>
       <tr><td><code>resolve &lt;key&gt;</code></td><td><code>--show --json --source</code></td><td>Resolve and print one key (redacted by default).</td></tr>
-      <tr><td><code>validate</code></td><td><code>--providers --no-providers --all-profiles --json</code></td><td>Check config, references, provider connectivity.</td></tr>
+      <tr><td><code>validate</code></td><td><code>--providers --no-providers --all-environments --json</code></td><td>Check config, references, provider connectivity.</td></tr>
       <tr><td><code>doctor</code></td><td>—</td><td>Diagnose setup, credentials, installed providers.</td></tr>
       <tr><td><code>providers</code></td><td><code>list · search · install · update · info · remove</code></td><td>Manage installed provider plugins.</td></tr>
       <tr><td><code>completions &lt;shell&gt;</code></td><td>—</td><td>Print a completion script (bash/zsh/fish/powershell/elvish).</td></tr>
@@ -230,7 +230,7 @@ dotenv-cloud providers info &lt;name&gt;         <span class="d"># metadata + in
     <table>
       <tr><th>Variable</th><th>Used by</th><th>Description</th></tr>
       <tr><td><code>DOTENV_CLOUD_CONFIG</code></td><td>all</td><td>Path to a config file; skips discovery.</td></tr>
-      <tr><td><code>DOTENV_CLOUD_PROFILE</code></td><td>all</td><td>Active profile (beaten by <code>--profile</code>).</td></tr>
+      <tr><td><code>DOTENV_CLOUD_ENVIRONMENT</code></td><td>all</td><td>Active environment (beaten by <code>--environment</code>).</td></tr>
       <tr><td><code>DOTENV_CLOUD_VERSION</code> / <code>_BIN_DIR</code> / <code>_TARGET</code></td><td>install script</td><td>Version / install dir / forced target.</td></tr>
       <tr><td><code>DOTENV_CLOUD_NO_COMPLETIONS</code></td><td>install script</td><td>Skip wiring shell completions.</td></tr>
     </table>
@@ -281,8 +281,9 @@ PINNED=vault://secret/app?version=3<span class="c">#password</span>   <span clas
     absolute. Don't commit <code>[providers.aws].profile</code> (it overrides
     <code>AWS_PROFILE</code>); let each developer set the env var.
     <code>export</code>/<code>build</code> output holds real secrets — gitignore it.
-    A missing remote with <code>resolution.missing = warn/ignore</code> is
-    <em>skipped</em>, not replaced by <code>[defaults]</code>.</div>
+    When a remote reference fails to resolve, the key falls back to its
+    <code>[environment.&lt;name&gt;.defaults]</code> value if one is set; only when no
+    default exists does <code>resolution.missing</code> apply.</div>
   </section>
 
   <!-- ============ Reference / Config TOML ============ -->
@@ -295,9 +296,9 @@ PINNED=vault://secret/app?version=3<span class="c">#password</span>   <span clas
     <h3>Sections &amp; keys</h3>
     <table>
       <tr><th>Key</th><th>Default</th><th>Description</th></tr>
-      <tr><td><code>default_profile</code></td><td><code>"dev"</code></td><td>Profile when none is selected.</td></tr>
-      <tr><td><code>[profile.&lt;name&gt;]</code> · <code>env_file</code> / <code>env_local_file</code></td><td><code>.env</code> / <code>.env.local</code></td><td>Dotenv files per profile.</td></tr>
-      <tr><td><code>[defaults]</code></td><td><code>{}</code></td><td>Lowest-precedence fallbacks for absent keys.</td></tr>
+      <tr><td><code>default_environment</code></td><td><code>"dev"</code></td><td>Environment when none is selected.</td></tr>
+      <tr><td><code>[environment.&lt;name&gt;]</code> · <code>env_file</code> / <code>env_local_file</code></td><td><code>.env</code> / <code>.env.local</code></td><td>Dotenv files per environment.</td></tr>
+      <tr><td><code>[environment.&lt;name&gt;.defaults]</code></td><td><code>{}</code></td><td>Lowest-precedence values; also the fallback when a remote ref fails.</td></tr>
       <tr><td><code>[precedence].order</code></td><td><code>cli,system,remote,env.local,env,defaults</code></td><td>Highest first; no duplicates.</td></tr>
       <tr><td><code>[providers.aws]</code> / <code>[providers.vault]</code></td><td>—</td><td>Free-form, passed to the plugin.</td></tr>
       <tr><td><code>[provider_registry].url</code></td><td>public</td><td>Registry index URL.</td></tr>
@@ -317,17 +318,17 @@ PINNED=vault://secret/app?version=3<span class="c">#password</span>   <span clas
     outranks <code>defaults</code>.</p>
 
     <h3>Full annotated example</h3>
-    <div class="code"><pre>default_profile = "dev"
+    <div class="code"><pre>default_environment = "dev"
 
-[profile.dev]
+[environment.dev]
 env_file = ".env"
 env_local_file = ".env.local"
 
-[profile.prod]
-env_file = ".env.production"
-
-[defaults]
+[environment.dev.defaults]
 LOG_LEVEL = "info"
+
+[environment.prod]
+env_file = ".env.production"
 
 [precedence]
 order = ["cli", "system", "remote", "env.local", "env", "defaults"]
